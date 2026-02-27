@@ -1,5 +1,4 @@
 #define F_CPU 16000000UL
-
 //#include <Arduino.h>
 #include <avr/io.h>
 #include <util/delay.h>
@@ -35,22 +34,26 @@ int main(void)
                 led_portB_on++;
                 _delay_ms(delay_time_ms);
             }
-            PORTB = 0x00;
+            //PORTB = 0x00; // Turn current led off before next led is put on.
 
-            // Turn Turn on portC LEDs
+            // Turn Turn on portC LEDs left2right
             if (led_portB_on == 6){
                 if (led_portC_on < 2){
                     PORTC |= 1 << led_portC_on;
                     led_portC_on++;
                     _delay_ms(delay_time_ms);
-                }     //Serial.println("Going Backwards");
+                    //Serial.println("Going Backwards");
+                }     
             }
+            //PORTC = 0x00;  
             //PORTC = 0x00;  // Turn current led off before next led is put on.
-            PORTC = 0x00;  // Turn current led off before next led is put on.
+
         } // end:: if (flag_left2right)
 
-        // Both port's have had all LEDS left2right.  So stup flags
-        // and varibles to the correct state for moving right to left.
+
+        // Both port's have  had all LEDS moved  left2right.  So setup
+        // flags and varibles to the correct state for moving right to
+        // left.
         if ( (led_portB_on == 6) && (led_portC_on == 2) ){
             //Serial.println("Test to set Going Backwards");
             flag_left2right = 0; // Time to go backwards
@@ -69,6 +72,7 @@ int main(void)
 
         if (!flag_left2right){
 
+            // Turn on the LEDs from right to left.
             if (leds_right_to_left_portC){
                 PORTC |= (0x02 >> led_right_to_left_portC_on);
                 _delay_ms(delay_time_ms);
@@ -78,10 +82,9 @@ int main(void)
                 else{
                     leds_right_to_left_portC = 0;
                     leds_right_to_left_portB = 1;
-                    //led_right_to_left_portC_on = 0;
                 }
             }
-            PORTC = 0x00;
+            //PORTC = 0x00;
 
 
             if (leds_right_to_left_portB){
@@ -95,11 +98,14 @@ int main(void)
                 }
                 // PORTB = 0x00;
             }
-            PORTB = 0x00;
+            //PORTB = 0x00;
 
         } // end:: if (!flag_left2right)
-                
 
+        //_delay_ms(delay_time_ms);
+        PORTB = 0x00;
+        PORTC = 0x00;
+        
     } // end: while
 
 }
