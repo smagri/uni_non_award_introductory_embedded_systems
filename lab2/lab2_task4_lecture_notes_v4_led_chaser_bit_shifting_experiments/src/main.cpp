@@ -43,13 +43,11 @@ int main(void)
                 led_left_to_right_portB_on++;
             }
             // Turn Turn on portC LEDs left2right
-            else if (led_left_to_right_portB_on == 6){
-                if (led_left_to_right_portC_on < 2){
-                    led_left_to_right_portC_on++;
+            else if ((led_left_to_right_portB_on == 6) && (led_left_to_right_portC_on < 2)){
+                PORTC |= 1 << led_left_to_right_portC_on;
+                led_left_to_right_portC_on++;
                     //Serial.println("dbg: Going Backwards");
-                }
             }
-            //
             else{
                 // Both port's have had all LEDS moved left2right.  So
                 // setup  type name(args)  const;lags and  varibles to
