@@ -75,9 +75,6 @@ int main(void)
 
 
 
-        
-
-        
         if (!turn_on_leds_from_left2right){
             // Turn on LEDs right to left, or backwards
 
