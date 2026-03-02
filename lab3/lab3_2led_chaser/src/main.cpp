@@ -1,5 +1,5 @@
 #define F_CPU 16000000UL
-//#include <Arduino.h>
+#include <Arduino.h>
 #include <avr/io.h>
 #include <util/delay.h>
 
@@ -33,48 +33,7 @@ int main(void)
     
     while (1) {
 
-        
-        if (turn_on_leds_from_left2right){
-            // Turn on LEDs left2right, or forwards.
-
-            // Turn on portB LEDs left2right.
-            if (led_left_to_right_portB_on < 6){
-                PORTB |= 1 << led_left_to_right_portB_on;
-                led_left_to_right_portB_on++;
-            }
-            // Turn Turn on portC LEDs left2right
-            else if ((led_left_to_right_portB_on == 6) && (led_left_to_right_portC_on < 2)){
-                // PORTC |= 1 << led_left_to_right_portC_on;
-                // PORTC |= 1 << led_left_to_right_portC_on + 1;
-                // led_left_to_right_portC_on++;
-                    //Serial.println("dbg: Going Backwards");
-            }
-            else{
-                // Both port's have had all LEDS moved left2right.  So
-                // setup  type name(args)  const;lags and  varibles to
-                // the correct  state for  moving right to  left.  And
-                // for the next time LEDs need to go from left2right.
-
-                // Serial.println("dbg:Test to set Going Backwards");
-
-                // Time to go backwards, or right to left.
-                turn_on_leds_from_left2right = 0; 
-
-                leds_right_to_left_portC = 1;
-                leds_right_to_left_portB = 0;
-
-            
-                led_left_to_right_portB_on = 0;
-                led_left_to_right_portC_on = 0;
-            }
-            
-
-        } // end:: if (turn_on_leds_from_left2right)
-
-
-
-
-        if (!turn_on_leds_from_left2right){
+         if (!turn_on_leds_from_left2right){
             // Turn on LEDs right to left, or backwards
 
             if (leds_right_to_left_portC){
@@ -99,16 +58,64 @@ int main(void)
                 if (led_right_to_left_portB_on == 6){
                     //Serial.println("dbg: Going Forwards Again");
                     // Time to go from left2right, or forwards.
-                    turn_on_leds_from_left2right = 0;
+                    turn_on_leds_from_left2right = 1;
 
                     led_right_to_left_portC_on = 0;
                     led_right_to_left_portB_on = 0;
+
+                    led_left_to_right_portC_on = 0;
+                    led_left_to_right_portB_on = 0;
                 }
             }
             
         }// end:: if (!turn_on_leds_from_left2right)
 
-        
+
+         
+         
+        if (turn_on_leds_from_left2right){
+            // Turn on LEDs left2right, or forwards.
+            Serial.println("dbg: turn_on_leds_from_left2right ");
+
+            // Turn on portB LEDs left2right.
+            if (led_left_to_right_portB_on < 6){
+                Serial.println("dbg: led_left_to_right_portB_on < 6");
+                PORTB |= 1 << led_left_to_right_portB_on;
+                PORTB |= 1 << (led_left_to_right_portB_on + 1);
+                led_left_to_right_portB_on++;
+            }
+            // Turn Turn on portC LEDs left2right
+            // else if ((led_left_to_right_portB_on == 6) && (led_left_to_right_portC_on < 2)){
+            //     PORTC |= 1 << led_left_to_right_portC_on;
+            //     led_left_to_right_portC_on++;
+            //     //Serial.println("dbg: Going Backwards");
+            // }
+            // else{
+            //     Serial.println("dbg: else");
+            //     // Both port's have had all LEDS moved left2right.  So
+            //     // setup  type name(args)  const;lags and  varibles to
+            //     // the correct  state for  moving right to  left.  And
+            //     // for the next time LEDs need to go from left2right.
+
+            //     // Serial.println("dbg:Test to set Going Backwards");
+
+            //     // Time to go backwards, or right to left.
+            //     turn_on_leds_from_left2right = 0; 
+
+            //     leds_right_to_left_portC = 1;
+            //     leds_right_to_left_portB = 0;
+
+            
+            //     led_left_to_right_portB_on = 0;
+            //     led_left_to_right_portC_on = 0;
+            // }
+            
+
+        } // end:: if (turn_on_leds_from_left2right)
+
+
+
+
         // Show  the high/on  output of  the LEDs  for a  little while
         // before  turning them  off.  If  we didn't  do this  the CPU
         // ticks over so fast we wouldn't see anything.
