@@ -20,15 +20,15 @@ int main(void)
     unsigned char led_left_to_right_portC_on = 0;
     unsigned char led_right_to_left_portB_on = 0;
     unsigned char led_right_to_left_portC_on = 0;
-    unsigned char leds_right_to_left_portC = 1;
-    unsigned char leds_right_to_left_portB = 0;
+    unsigned char leds_right_to_left_portC = 0;
+    unsigned char leds_right_to_left_portB = 1;
 
     // Otherwise the CPU moves to fast  and we don't see any LEDs turn
     // on or off.
     uint16_t delay_time_ms = 500;
 
     // True when moving forwards and false for moving backwards.
-    bool turn_on_leds_from_left2right = 1;
+    bool turn_on_leds_from_left2right = 0;
 
     
     while (1) {
@@ -44,8 +44,9 @@ int main(void)
             }
             // Turn Turn on portC LEDs left2right
             else if ((led_left_to_right_portB_on == 6) && (led_left_to_right_portC_on < 2)){
-                PORTC |= 1 << led_left_to_right_portC_on;
-                led_left_to_right_portC_on++;
+                // PORTC |= 1 << led_left_to_right_portC_on;
+                // PORTC |= 1 << led_left_to_right_portC_on + 1;
+                // led_left_to_right_portC_on++;
                     //Serial.println("dbg: Going Backwards");
             }
             else{
@@ -62,8 +63,6 @@ int main(void)
                 leds_right_to_left_portC = 1;
                 leds_right_to_left_portB = 0;
 
-                led_right_to_left_portC_on = 0;
-                led_right_to_left_portB_on = 0;
             
                 led_left_to_right_portB_on = 0;
                 led_left_to_right_portC_on = 0;
@@ -80,25 +79,30 @@ int main(void)
 
             if (leds_right_to_left_portC){
                 // Turn on the LEDs from right to left.
-                PORTC |= (0x02 >> led_right_to_left_portC_on);
-                if (led_right_to_left_portC_on < 1){
-                    led_right_to_left_portC_on++;
-                }
-                else{
-                    leds_right_to_left_portC = 0;
-                    leds_right_to_left_portB = 1;
-                }
+                // PORTC |= (0x02 >> led_right_to_left_portC_on);
+                // PORTC |= (0x02 >> led_right_to_left_portC_on + 1);
+                // if (led_right_to_left_portC_on < 1){
+                //     led_right_to_left_portC_on++;
+                // }
+                // else{
+                //     leds_right_to_left_portC = 0;
+                //     leds_right_to_left_portB = 1;
+                // }
             }
             else if (leds_right_to_left_portB){
                 // Turn on the LEDs of portB from right to left
                 
                 //Serial.println("dbg: Going Backwards");
                 PORTB |= (0x20 >> led_right_to_left_portB_on);
+                PORTB |= (0x20 >> (led_right_to_left_portB_on + 1));
                 led_right_to_left_portB_on++;
                 if (led_right_to_left_portB_on == 6){
                     //Serial.println("dbg: Going Forwards Again");
                     // Time to go from left2right, or forwards.
-                    turn_on_leds_from_left2right = 1; 
+                    turn_on_leds_from_left2right = 0;
+
+                    led_right_to_left_portC_on = 0;
+                    led_right_to_left_portB_on = 0;
                 }
             }
             
