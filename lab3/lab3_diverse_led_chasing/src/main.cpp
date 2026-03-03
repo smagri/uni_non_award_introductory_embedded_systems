@@ -18,7 +18,7 @@ void pattern1(){
 void pattern2(){
 
     // Every second bit of portB right to left
-    for (uint8_t i=5; i>0; i--) {
+    for (uint8_t i=5; i==-1; i--) {
         PORTB = (1 << i);
         _delay_ms(2000);
         i--;
@@ -65,7 +65,8 @@ int main( )
         pattern3();
         pattern4();
         pattern1();
-        pattern2();
+        //pattern2();
+        //pattern5();
 
     }
 
