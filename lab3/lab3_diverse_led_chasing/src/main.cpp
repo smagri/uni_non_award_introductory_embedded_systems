@@ -4,12 +4,14 @@
 #include <avr/io.h>
 #include <util/delay.h>
 
+// Allows bulk change of delays with just one line of code change.
+#define delay_in_ms 1000
 
 void pattern1(){
     // Every second bit of portB left to right
     for (uint8_t i=0; i<5; i++) {
         PORTB = (1 << i);
-        _delay_ms(2000);
+        _delay_ms(delay_in_ms);
         i++;
     }
 
@@ -26,7 +28,7 @@ void pattern2(){
         //Serial.print("i=");
         //Serial.println(i);
         PORTB = (1 << i);
-        _delay_ms(2000);
+        _delay_ms(delay_in_ms);
         i--;
     }
 
@@ -36,17 +38,19 @@ void pattern2(){
 void pattern3(){
     // All LEDs on then all LEDs off.
     PORTB = 0x3F;
-    _delay_ms(1000);
+    _delay_ms(delay_in_ms);
+    
     PORTB = 0x00;
-    _delay_ms(500);
+    _delay_ms(delay_in_ms);
 }
 
 void pattern4(){
     // MSB then LSB of PORTB On
     PORTB = 0x20;
-    _delay_ms(1000);
+    _delay_ms(delay_in_ms);
+
     PORTB = 0x01;
-    _delay_ms(1000);
+    _delay_ms(delay_in_ms);
     
 }
 
@@ -55,9 +59,9 @@ void pattern5(){
     // Toggle portC LEDs on and off 3 times
     for (uint8_t i=0 ; i<3; ++i) {
         PORTC = 0x01;
-        _delay_ms(1000);
+        _delay_ms(delay_in_ms);
         PORTC = 0x02;
-        _delay_ms(1000);
+        _delay_ms(delay_in_ms);
     }
 
     // So the next pattern comes out cleanly.  On the Arduino
