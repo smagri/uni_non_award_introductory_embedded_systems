@@ -38,9 +38,9 @@ void pattern2(){
 
 void pattern3(){
     // All LEDs on then all LEDs off.
-    PORTB = 0x3F;
+    PORTB |= 0x3F;
     _delay_ms(delay_time_ms);
-    PORTB = 0x00;
+    PORTB &= ~(0x3F); // PORTB anded with 0, anything anded with 0 is 0
     _delay_ms(delay_time_ms);
 }
 
