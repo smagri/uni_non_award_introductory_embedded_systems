@@ -45,6 +45,15 @@ void pattern4(){
 }
 
 
+void pattern5(){
+    // Toggle portC LEDs on and off 3 times
+    for (uint8_t i=0 ; i<3; ++i) {
+        PORTC = 0x01;
+        _delay_ms(1000);
+        PORTC = 0x02;
+        _delay_ms(1000);
+    }
+}
 
 
 int main( )
@@ -65,9 +74,10 @@ int main( )
         pattern3();
         pattern4();
         pattern1();
+        PORTB = 0x00;
         //pattern2();
-        //pattern5();
-
+        pattern5();
+        PORTC = 0x00;
     }
 
 
