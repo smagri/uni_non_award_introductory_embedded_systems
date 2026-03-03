@@ -39,7 +39,7 @@ void pattern2(){
 void pattern3(){
     // All LEDs on then all LEDs off.
     PORTB = 0x3F;
-    _delay_ms(delay_time_ms);
+    _delay_ms(1000);
     PORTB = 0x00;
     _delay_ms(delay_time_ms);
 }
@@ -47,7 +47,7 @@ void pattern3(){
 void pattern4(){
     // MSB then LSB of PORTB On
     PORTB = 0x20;
-    _delay_ms(delay_time_ms);
+    _delay_ms(1000);
     PORTB = 0x01;
     _delay_ms(delay_time_ms);
     
