@@ -6,10 +6,10 @@
 
 
 void pattern1(){
-    // Every second bit of portB
+    // Every second bit of portB left to right
     for (uint8_t i=0; i<5; i++) {
         PORTB = (1 << i);
-        _delay_ms(500);
+        _delay_ms(2000);
         i++;
     }
     
@@ -17,13 +17,20 @@ void pattern1(){
 
 void pattern2(){
 
+    // Every second bit of portB right to left
+    for (uint8_t i=5; i>0; i--) {
+        PORTB = (1 << i);
+        _delay_ms(2000);
+        i--;
+    }
+
     
 }
 
 void pattern3(){
     // All LEDs on then all LEDs off.
     PORTB = 0x3F;
-    _delay_ms(500);
+    _delay_ms(1000);
     PORTB = 0x00;
     _delay_ms(500);
 }
@@ -55,10 +62,10 @@ int main( )
 
     while (1) {
 
-        
         pattern3();
         pattern4();
         pattern1();
+        pattern2();
 
     }
 
