@@ -12,13 +12,19 @@ void pattern1(){
         _delay_ms(2000);
         i++;
     }
-    
+
+    // So the next pattern comes out cleanly.  On the Arduino
+    // port registers hold their value until you change them.
+    PORTB = 0x00;
 }
 
 void pattern2(){
-
+    //Serial.println("dbg: in pattern2()");
     // Every second bit of portB right to left
-    for (uint8_t i=5; i==-1; i--) {
+    for (int8_t i=5; i>0; i--) {
+        //Serial.println("dbg: in for loop pattern2()");
+        //Serial.print("i=");
+        //Serial.println(i);
         PORTB = (1 << i);
         _delay_ms(2000);
         i--;
@@ -53,6 +59,10 @@ void pattern5(){
         PORTC = 0x02;
         _delay_ms(1000);
     }
+
+    // So the next pattern comes out cleanly.  On the Arduino
+    // port registers hold their value until you change them.
+    PORTC = 0x00;
 }
 
 
@@ -68,16 +78,17 @@ int main( )
     PORTB = 0x00;
     PORTC = 0x00;
 
+    //init();
+    //Serial.begin(9600);
+
 
     while (1) {
 
         pattern3();
         pattern4();
         pattern1();
-        PORTB = 0x00;
-        //pattern2();
         pattern5();
-        PORTC = 0x00;
+        pattern2();
     }
 
 
