@@ -65,7 +65,9 @@ void pattern5(){
      
     for (uint8_t i=0; i<3; i++) {
         // Toggle PC0
-        PORTC |= (1 << PC0); // PC0 = 0 from header files
+        
+         // PC0 = 0 from header files. Hover over PC0 and right click
+        PORTC |= (1 << PC0);
         _delay_ms(delay_time_ms/2); // play with global delay
         PORTC &= ~(1 << PC0); // PORTC = PORTC & 0, anything anded with 0 is 0.
                   
