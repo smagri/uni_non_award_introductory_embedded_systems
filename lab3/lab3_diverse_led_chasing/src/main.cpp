@@ -92,8 +92,9 @@ int main( )
     DDRC = 0x03;
 
     // So the input pins are not set  to high due to the arduino input
-    // pins being tied high  by default, even if in DDRx  it is set to
-    // an inpur.  We explicity make them start as active LOW.
+    // pins being tied high by default, with the pullup resistor. Even
+    // if in DDRx it is set to an input.  We explicity make them start
+    // as active LOW.
     PORTB = 0x00;
     PORTC = 0x00;
 
@@ -103,7 +104,7 @@ int main( )
 
     while (1) {
 
-        pattern3();  // All LEDs on then all LEDs off.
+        pattern3();  // All port B LEDs on then all port B LEDs off.
         pattern4();  // MSB then LSB on at same time of PORTB, then cleared.
         pattern1();  // Every second bit of portB left to right
         pattern5();  // Toggle portC LEDs on and off 3 times
