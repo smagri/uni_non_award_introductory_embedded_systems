@@ -50,6 +50,7 @@ int main(void)
 
     // int8_t to let led_on_index go -ve for loops to work.
     int8_t led_on_index = 6;
+
     
     while (1) {
 

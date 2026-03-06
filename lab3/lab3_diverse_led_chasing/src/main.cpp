@@ -104,10 +104,10 @@ int main( )
 
     while (1) {
 
-        pattern3();  // All port B LEDs on then all port B LEDs off.
-        pattern4();  // MSB then LSB on at same time of PORTB, then cleared.
-        pattern1();  // Every second bit of portB left to right
-        pattern5();  // Toggle portC LEDs on and off 3 times
+        // pattern3();  // All port B LEDs on then all port B LEDs off.
+        //pattern4();  // MSB then LSB on at same time of PORTB, then cleared.
+        // pattern1();  // Every second bit of portB left to right
+        //pattern5();  // Toggle portC LEDs on and off 3 times
         pattern2();  // Every second bit of portB right to left
     }
 
