@@ -26,8 +26,8 @@ int main(void)
     DDRB = 0xFF; // All port B pins set to output.
     
     // Frequency's are an octave starting from C5
-    //float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 88.00, 987.77};
-    float frequency[] = {523.25};
+    float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 88.00, 987.77};
+    //float frequency[] = {523.25};
     float *ptr_frequency = &frequency[0];
 
     // Duty  cycle is  the  ratio of  PWM time_signal_high/period.   The
@@ -40,7 +40,10 @@ int main(void)
 
     // There are 1e6us in a second. `That is 1*10^6us in a second. 
     // unsigned long play_time = 10*1e6; // play for 10 seconds
-    unsigned long play_time = 10*1e6; // play for 10 seconds
+    // unsigned long play_time = 10*1e6; // play for 10 seconds
+    // unsigned long play_time = 2*1e6; // play for 2 seconds
+    // unsigned long play_time = 1*1e6; // play for 1 seconds
+    unsigned long play_time = 0.5*1e6; // play for 0.5 seconds
     
 
     //   while (1) {
@@ -83,10 +86,15 @@ void playSound(float frequency, float duty_cycle, unsigned long play_time){
 
         // Play for one Period forech high-low combinations
         PORTB |= (1<<passive_buzzer); // Set output of portB pin0 to high
-        _delay_us(time_signal_high_us);
+        for (unsigned int i=0; i<time_signal_high_us; i++){
+            _delay_us(1);
+        }
 
         PORTB &= ~(1<<passive_buzzer); // Set output of portB pin0 to low
-            _delay_us(time_signal_low_us);
+        for (unsigned int i=0; i<time_signal_low_us; i++){
+            _delay_us(1);
+        }
+
     }
     
 }
