@@ -17,8 +17,7 @@ void playSound(float frequency, float duty_cycle, unsigned long play_time);
 
 
 
-int main(void)
-{
+int main(void){
     // For debugging
     //init();
     //Serial.begin(9600);
@@ -43,24 +42,31 @@ int main(void)
     // unsigned long play_time = 10*1e6; // play for 10 seconds
     // unsigned long play_time = 2*1e6; // play for 2 seconds
     // unsigned long play_time = 1*1e6; // play for 1 seconds
-    unsigned long play_time = 0.5*1e6; // play for 0.5 seconds
-    
 
-    //   while (1) {
+    // When the delay is set to 10 seconds we are really getting the time sum of:
+    // _delay_us1()
+    // loop increment
+    // compare and branch
+    // However, at shorter durations it is less obvious.
+    // unsigned long play_time = 10*1e6; // play for 0.5 seconds
+
+    // Later the microseconds are removed when deviding by the period in
+    // microseconds
+    
+    unsigned long play_time = 0.5*1e6; // play for 0.5 seconds each frequency.
+    
+    // Play frequencys forever, so we get 0.5 seconds.
+    while (1){
 
         // Play all frequencys in frequency array.
         for (unsigned char i=0; i<sizeof(frequency)/sizeof(float); i++) {
 
             playSound(*(ptr_frequency+i), duty_cycle, play_time);            
         }
-        
-        // }
-    
+    } // end: while
 
-
-    return 0;
-    
-}
+    return 0; 
+} // end: main"()"
 
 
 
