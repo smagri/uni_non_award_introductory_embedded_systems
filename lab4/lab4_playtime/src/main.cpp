@@ -24,8 +24,8 @@ int main(void){
 
     DDRB = 0xFF; // All port B pins set to output.
     
-    // Frequency's are an octave starting from C5
-    float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 88.00, 987.77};
+    // Frequency's are an octave starting from C5.  Middle C is C4.
+    float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 880.00, 987.77};
     //float frequency[] = {523.25};
     float *ptr_frequency = &frequency[0];
 
