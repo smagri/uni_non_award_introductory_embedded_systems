@@ -24,8 +24,19 @@ int main(void){
 
     DDRB = 0xFF; // All port B pins set to output.
     
-    // Frequency's are an octave starting from C5.  Middle C is C4.
-    float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 880.00, 987.77};
+    // Frequency's are  an octave starting  from C5.
+    //float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 880.00, 987.77};
+
+    // Frequency's are an octave starting from C4 aka middle C.
+//    float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88};
+
+    //float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00};
+//    float frequency[]={261.63, 261.63, 261.63, 261.63, 261.63};
+
+    //float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00};
+    //    float frequency[]={523.25, 523.25, 523.25, 523.25, 523.25};
+    float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99};
+    
     //float frequency[] = {523.25};
     float *ptr_frequency = &frequency[0];
 
@@ -35,7 +46,7 @@ int main(void){
     // I like to think of the duty cycle as a percentage.  Thus 0.1 duty
     // cycle means (0.1 *  100) %, or 10%.  Thus the  time the signal is
     // high is 10% of the period.
-    float duty_cycle = 0.1; // 1/10 of the period of the sinal is high
+    float duty_cycle = 0; // 1/10 of the period of the sinal is high
 
     // There are 1e6us in a second. `That is 1*10^6us in a second. 
     // unsigned long play_time = 10*1e6; // play for 10 seconds
@@ -53,7 +64,7 @@ int main(void){
     // Later the microseconds are removed when deviding by the period in
     // microseconds
     
-    unsigned long play_time = 2*1e6; // play for 0.5 seconds each frequency.
+    unsigned long play_time = 2.0*1e6; // play for 0.5 seconds each frequency.
     
     // Play frequencys forever, so we get 0.5 seconds.
     while (1){
@@ -61,7 +72,28 @@ int main(void){
         // Play all frequencys in frequency array.
         for (unsigned char i=0; i<sizeof(frequency)/sizeof(float); i++) {
 
-            playSound(*(ptr_frequency+i), duty_cycle, play_time);            
+            // For  passive  buzzers,  volume  doesn't  increase  much
+            // beyond ~50%  duty cycle.   So good values  are usually:
+            // 0.1 →  0.5 not 0.1 →  0.9.  Remember to keep  your duty
+            // cycle between 0 and 1 as at  1 the signal is on all the
+            // time already.
+            duty_cycle = 0.1 + (0.1*i);
+            // if (i==0){
+            //     duty_cycle = 0.05;
+            // }
+            // else if (i==1){
+            //     duty_cycle = 0.5;
+            // }
+            // else if (i==2){
+            //     duty_cycle = 0.95;
+                    
+            // }
+            // else{
+            //     duty_cycle = 0.05;
+            // }
+
+            playSound(*(ptr_frequency+i), duty_cycle, play_time);
+
         }
     } // end: while
 
@@ -100,6 +132,18 @@ void playSound(float frequency, float duty_cycle, unsigned long play_time){
         for (unsigned int i=0; i<time_signal_low_us; i++){
             _delay_us(1);
         }
+
+        // // Play for one Period forech high-low combinations
+        // PORTB |= (1<<passive_buzzer); // Set output of portB pin0 to high
+        // //for (unsigned int i=0; i<time_signal_high_us; i++){
+        // _delay_us((int)time_signal_high_us);
+        //     //}
+
+        // PORTB &= ~(1<<passive_buzzer); // Set output of portB pin0 to low
+        // //for (unsigned int i=0; i<time_signal_low_us; i++){
+        // _delay_us((int)time_signal_low_us);
+        //     //}
+
 
     }
     
