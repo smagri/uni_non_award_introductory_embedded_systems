@@ -50,10 +50,10 @@ int main(void){
     // However, at shorter durations it is less obvious.
     // unsigned long play_time = 10*1e6; // play for 0.5 seconds
 
-    // Later the microseconds are removed when deviding by the period in
+    // Later the microseconds are removed when dividing by the period in
     // microseconds
     
-    unsigned long play_time = 2*1e6; // play for 0.5 seconds each frequency.
+    unsigned long play_time = 1*1e6; // play for 0.5 seconds each frequency.
     
     // Play frequencys forever, so we get 0.5 seconds.
     while (1){

@@ -19,25 +19,28 @@ void playSound(float frequency, float duty_cycle, unsigned long play_time);
 
 int main(void){
     // For debugging
-    //init();
-    //Serial.begin(9600);
+    //  init();
+    // Serial.begin(9600);
 
     DDRB = 0xFF; // All port B pins set to output.
-    
+    PORTB = 0x00; // Clear port for safety
     // Frequency's are  an octave starting  from C5.
     //float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99, 880.00, 987.77};
 
     // Frequency's are an octave starting from C4 aka middle C.
-//    float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88};
+    // float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88};
 
     //float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00};
-//    float frequency[]={261.63, 261.63, 261.63, 261.63, 261.63};
-
+    //float frequency[]={261.63, 261.63, 261.63, 261.63, 261.63};
     //float frequency[]={261.63, 293.66, 329.63, 349.23, 392.00};
-    //    float frequency[]={523.25, 523.25, 523.25, 523.25, 523.25};
-    float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99};
+
+    // B5 Si
+    float frequency[]={987.77, 987.77, 987.77, 987.77, 987.77};
+
+    //float frequency[]={261.36, 523.25, 739.99, 1046.5, 1975.53};
+    //float frequency[]={1000.00, 1000.00, 1000.00, 1000.00, 1000.00};
+    //float frequency[] = {523.25, 587.33, 659.26, 698.46, 783.99};
     
-    //float frequency[] = {523.25};
     float *ptr_frequency = &frequency[0];
 
     // Duty  cycle is  the  ratio of  PWM time_signal_high/period.   The
@@ -64,7 +67,7 @@ int main(void){
     // Later the microseconds are removed when deviding by the period in
     // microseconds
     
-    unsigned long play_time = 2.0*1e6; // play for 0.5 seconds each frequency.
+    unsigned long play_time = 1.0*1e6; // play for 0.5 seconds each frequency.
     
     // Play frequencys forever, so we get 0.5 seconds.
     while (1){
@@ -78,19 +81,9 @@ int main(void){
             // cycle between 0 and 1 as at  1 the signal is on all the
             // time already.
             duty_cycle = 0.1 + (0.1*i);
-            // if (i==0){
-            //     duty_cycle = 0.05;
-            // }
-            // else if (i==1){
-            //     duty_cycle = 0.5;
-            // }
-            // else if (i==2){
-            //     duty_cycle = 0.95;
-                    
-            // }
-            // else{
-            //     duty_cycle = 0.05;
-            // }
+//            Serial.print("dbg: in main for loop, duty_cycle=");
+//            Serial.println(duty_cycle);
+
 
             playSound(*(ptr_frequency+i), duty_cycle, play_time);
 
@@ -119,6 +112,19 @@ void playSound(float frequency, float duty_cycle, unsigned long play_time){
     // required.  As  one  invocation  of  our for  loop  below  is  one
     // period. in length.
     cycles_for_playtime = ( (unsigned long)(play_time/period_us) );
+
+    // Serial.print("dbg: playSound(), duty_cycle=");
+    // Serial.println(duty_cycle);
+    // Serial.print("dbg: playSound(), frequency=");
+    // Serial.println(frequency);
+    // Serial.print("dbg: playSound(), period_us=");
+    // Serial.println(period_us);
+    // Serial.print("dbg: playSound(), time_signal_high_us=");
+    // Serial.println(time_signal_high_us);
+    // Serial.print("dbg: playSound(), time_signal_low_us=");
+    // Serial.println(time_signal_low_us);
+    // Serial.print("dbg: playSound(), cycles_for_playtime=");
+    // Serial.println(cycles_for_playtime);
 
     for (unsigned long j=0; j<cycles_for_playtime; j++){
 
