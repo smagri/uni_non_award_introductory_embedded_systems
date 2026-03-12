@@ -12,13 +12,13 @@
 
 // These are my version of the bit manipulation functions, so you
 // don't need to know the order of precedence rules.
-//#define bitSet(reg, n) (reg |= (1 << n))
-#define bitSet(reg, n) (reg |= 1 << n)
+#define bitSet(reg, n) (reg |= (1 << n))
+//#define bitSet(reg, n) (reg |= 1 << n)
 #define bitRead(reg, n) ((reg >> n) & 1)
-//#define bitCheck(reg, n) ( ((reg) >> (n)) & 1 )
-#define bitCheck(reg, n) (reg >> n & 1)
+#define bitCheck(reg, n) ( ((reg) >> (n)) & 1 )
+//#define bitCheck(reg, n) (reg >> n & 1)
 #define bitClear(reg, n) (reg &= ~(1 << n))
-//#define bitInverse(reg, n) (reg ^= (1 << n))
+#define bitInverse(reg, n) (reg ^= (1 << n))
 
 // PB0 equates to number 0 as seen on vscode when you press control
 // and mouse click on the variable, eventually it leads you to this
@@ -32,6 +32,7 @@
 
 int main(void)
 {
+    init();
     Serial.begin(9600);
 
     // Assign addresses of atmege328p ports to pointer address so that
@@ -94,6 +95,7 @@ int main(void)
     while (1) {
         cnt = 0;
         timeout_counter = 30000;
+        
 
         // Send the  trigger signal (low-high-low where  high needs to
         // be at  least 10us TTL)  to the ultrasonic sensor,  which it
@@ -145,7 +147,11 @@ int main(void)
         // character values output to the serial port).
         Serial.print(">Dmm:");
         Serial.println(Dmm, 6); // print Dmm to precision of 6 decimal points
-
+        
+        // Delay required for HC-SR04 ultrasonic`sensor so it doesn't
+        // get triggers to fast.  That is, the sensor needs a minimum
+        // delay between trigger pulses to reset.
+        _delay_ms(200);
     }
 
     
