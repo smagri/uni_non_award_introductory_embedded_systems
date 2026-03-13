@@ -35,13 +35,14 @@
 
 
 
-
-void playSound(float frequency, float duty_cycle, unsigned long playtime_us);
+void playSound(float frequency, float duty_cycle, unsigned long playtime_us,
+               volatile uint8_t *port_buzzer);
 //float linear_mapping(uint_16t Dmm, uint16_t Dmax, uint16_t Delay_min, uint16_t Delay_max);
 
 
 // Measure  distance  to  an  obstacle using  the  HC-SR04  ultrasonic
-// sensor.  Then plot data to vscode's teleplot.
+// sensor.  Then plot data to  vscode's teleplot.  Also, emit a buzzer
+// pulse to indicate you are measuring distances.
 
 int main(void)
 {
@@ -65,7 +66,7 @@ int main(void)
     volatile uint8_t *port_sonar = &PORTB; // Use port B register.
 
     // Input register(reads actual pin voltage)
-    volatile uint8_t *pin_sonar = &PINB;
+    volatile uint8_t *port_sonar_inputs = &PINB;
     
     // Interface of atmega328p ports to the passive buzzer.
     volatile uint8_t *ddr_buzzer = &DDRC; 
@@ -115,7 +116,6 @@ int main(void)
     uint16_t timeout_counter = 30000;
 
     // frequency = play middle C, ie C4
-    //float frequency = 523.35;
     float frequency = 261.63;
 
     // duty cycle = (time_signal_high / period) * 100 = 50%
@@ -129,7 +129,7 @@ int main(void)
 
     // Much slower and the ultrasonic sensor triggers are too
     // infrequent or don't happen at all.
-    unsigned long playtime_us = 10000; // 2ms
+    unsigned long playtime_us = 10000; // 10ms
     
 
     while (1) {
@@ -147,7 +147,7 @@ int main(void)
         bitClear(*port_sonar, pin_trigger);
 
         // We need to check if the signal on the echo pin has gone high.
-        while (!bitCheck(*pin_sonar, pin_echo))
+        while (!bitCheck(*port_sonar_inputs, pin_echo))
             // We wait till it's true that the echo pin has gone high
             // to exit the wait/while loop.
 
@@ -163,12 +163,12 @@ int main(void)
         //
         // We read the echo signal from  the pin_echo input pin of the
         // PINB input register.
-        while (bitCheck(*pin_sonar, pin_echo) && timeout_counter--){
+        while (bitCheck(*port_sonar_inputs, pin_echo) && timeout_counter--){
             count++;
             _delay_us(1);
         }
         // Ensure echo pulse has completely finished.
-        while(bitCheck(*pin_sonar, pin_echo));
+        while(bitCheck(*port_sonar_inputs, pin_echo));
         
         
         // Note: Velocity  = Distance/Time,  so,
@@ -183,9 +183,11 @@ int main(void)
         //
         // The velocity of a sound wave is 346m/s@25degreesC.
         //
-
+        // Also remember that count is in us and the formula requires
+        // seconds.  So divide count by number of us in a second.
+        
         // Dmm in mm.
-        float Dmm = (float)count / 1.0e6 * velocity_of_sound / 2 * 1000;
+        float Dmm = ((float)count / 1.0e6) * velocity_of_sound / 2 * 1000;
 
         // Prepare  Dmm  for  input to  vscode  teleplot(plots  serial
         // character values output to the serial port).
@@ -194,16 +196,19 @@ int main(void)
         Serial.print(">Dmm:");
         Serial.println(Dmm, 6); // print Dmm to precision of 6 decimal points
         
-        // Delay required for HC-SR04 ultrasonic`sensor so it doesn't
-        // get triggers to fast.  That is, the sensor needs a minimum
-        // delay between trigger pulses to reset. Started with a 200ms
-        // delay but that proved unresponsive wrt to the triggers for
-        // the ultrasonic sensor.
+        // Delay required for HC-SR04  ultrasonic`sensor so it doesn't
+        // get triggers to fast.  That  is, the sensor needs a minimum
+        // delay between trigger pulses to reset.
+
+        // Started  with a  200ms delay  so the  distance measurements
+        // take longer  to aquire.   Hence, the sensor  distances give
+        // the appearance of not measuring correctly.
+
         _delay_ms(60);
 
         //float delay = linear_mapping(Dmm, Dmax, Delay_min, Delay_max);
 
-        playSound(frequency, duty_cycle, playtime_us);
+        playSound(frequency, duty_cycle, playtime_us, port_buzzer);
 
         //_delay_ms(delay);
     }
@@ -215,7 +220,8 @@ int main(void)
 
 
 
-void playSound(float frequency, float duty_cycle, unsigned long playtime_us){
+void playSound(float frequency, float duty_cycle, unsigned long playtime_us,
+               volatile uint8_t *port_buzzer){
 
     float period_us = (1/frequency)*1e6; // Period in microseconds.
     unsigned int time_signal_high_us = (duty_cycle * period_us); // in us
@@ -233,12 +239,12 @@ void playSound(float frequency, float duty_cycle, unsigned long playtime_us){
     for (unsigned long j=0; j<cycles_for_playtime; j++){
 
         // Play for one Period forech high-low combinations
-        PORTC |= (1<<pin_passive_buzzer); // Set output of portB pin0 to high
+        bitSet(*port_buzzer, pin_passive_buzzer);
         for (unsigned int i=0; i<time_signal_high_us; i++){
             _delay_us(1);
         }
 
-        PORTC &= ~(1<<pin_passive_buzzer); // Set output of portB pin0 to low
+        bitClear(*port_buzzer, pin_passive_buzzer);
         for (unsigned int i=0; i<time_signal_low_us; i++){
             _delay_us(1);
         }
