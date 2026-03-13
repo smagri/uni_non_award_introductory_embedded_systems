@@ -67,10 +67,10 @@ int main(void)
     volatile uint8_t *ddr_buzzer = &DDRC; 
     volatile uint8_t *port_buzzer = &PORTC;
     
-    float Dmin = 50; // minimum feasible distance for ultrasonic sensor, mm.
-    float Dmax = 2000;// maximum feasible distance for ultrasonic sensor, mm.
-    float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
-    float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
+    float Dmin = 10; // minimum feasible distance for ultrasonic sensor, mm.
+    float Dmax = 200;// maximum feasible distance for ultrasonic sensor, mm.
+    float buzzer_delay_min = 1; // maximum feasible buzzer delay, ms.
+    float buzzer_delay_max = 20; // maximum feasible buzzer delay, ms.
 
 
 
@@ -218,7 +218,7 @@ int main(void)
         // Started  with a  200ms delay  so the  distance measurements
         // take longer  to aquire.   Hence, the sensor  distances give
         // the appearance of not measuring correctly.
-        //_delay_ms(20);
+        _delay_ms(60);
 
 
         
