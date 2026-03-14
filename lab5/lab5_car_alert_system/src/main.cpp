@@ -66,9 +66,23 @@ int main(void)
     // Interface of atmega328p ports to the passive buzzer.
     volatile uint8_t *ddr_buzzer = &DDRC; 
     volatile uint8_t *port_buzzer = &PORTC;
+
+    // WORKS:
     
-    float Dmin = 50; // minimum feasible distance for ultrasonic sensor, mm.
-    float Dmax = 2000;// maximum feasible distance for ultrasonic sensor, mm.
+    // float Dmin = 50; // minimum feasible distance for ultrasonic sensor, mm.
+    // float Dmax = 2000;// maximum feasible distance for ultrasonic sensor, mm.
+    // float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
+    // float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
+
+    // EXPERIMENT, works as well:
+
+    // Ultrasonic  sensor  we  are  using is  the  HR-SR04,  with  the
+    // following specification.
+    //
+    float Dmin = 20; // minimum feasible distance for ultrasonic sensor, mm.
+    float Dmax = 4000;// maximum feasible distance for ultrasonic sensor, mm.
+
+    // I think you can't hear the buzzer below a 10ms on high pulse.
     float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
     float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
 
@@ -88,7 +102,7 @@ int main(void)
     // obstacle.
     bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
 
-    // Maximum  sensor measurment  distance is  5m. v=d/t,thus t/count
+    // Maximum  sensor measurment  distance is  5m. v=d/t,thus t/echo_high_us_count
     // needs  to  be  no  more than  2*5/343  sec  =  0.0292s=29200us.
     // log2(29200) ~=15  < 16 thus  a uint16_t is sufficient  to count
     // the number  of microseconds we  wait for echo detection  in the
@@ -108,7 +122,7 @@ int main(void)
     // time_echo_signal_is_high=2D/V=2*distance_to_obstacle/velocity_of_sound.
     //
     // The velocity of a sound wave is 346m/s@25degreesC.
-    uint16_t count = 0;
+    uint16_t echo_high_us_count = 0;
 
     float velocity_of_sound = 343; // Velocity of sound about 343m/s
                                    // at 25degreesC.
@@ -117,7 +131,10 @@ int main(void)
     uint16_t timeout_counter = 30000;
 
     // frequency = play middle C, ie C4
-    float frequency = 261.63;
+    //float frequency = 261.63;
+
+    float frequency = 523.25; // C5, one octave above middle C
+    
 
     // duty cycle = (time_signal_high / period) * 100 = 50%
     //
@@ -134,7 +151,7 @@ int main(void)
     
 
     while (1) {
-        count = 0;
+        echo_high_us_count = 0;
         timeout_counter = 30000;
         
 
@@ -165,7 +182,7 @@ int main(void)
         // We read the echo signal from  the pin_echo input pin of the
         // PINB input register.
         while (bitCheck(*port_sonar_inputs, pin_echo) && timeout_counter--){
-            count++;
+            echo_high_us_count++;
             _delay_us(1);
         }
         // Ensure echo pulse has completely finished.
@@ -184,11 +201,14 @@ int main(void)
         //
         // The velocity of a sound wave is 346m/s@25degreesC.
         //
-        // Also remember that count is in us and the formula requires
-        // seconds.  So divide count by number of us in a second.
+        
+        // Also  remember that  echo_high_us_count  is in  us and  the
+        // formula requires seconds.   So divide echo_high_us_count by
+        // number of us in a second.
         
         // Dmm in mm.
-        float Dmm = ((float)count / 1.0e6) * velocity_of_sound / 2 * 1000;
+        float Dmm
+            = ((float)echo_high_us_count / 1.0e6)* velocity_of_sound / 2 * 1000;
 
         // Prepare  Dmm  for  input to  vscode  teleplot(plots  serial
         // character values output to the serial port).
@@ -197,8 +217,8 @@ int main(void)
         Serial.print(">Dmm:");
         Serial.println(Dmm, 6); // print Dmm to precision of 6 decimal points
         
-        
-        float delay = linear_mapping(Dmm, Dmin, Dmax, buzzer_delay_min, buzzer_delay_max);
+        float delay = linear_mapping(Dmm, Dmin, Dmax,
+                                     buzzer_delay_min, buzzer_delay_max);
 
         playSound(frequency, duty_cycle, playtime_us, port_buzzer);
 
@@ -206,6 +226,10 @@ int main(void)
         // not at runtime as here.
         //
         // _delay_ms(delay);
+
+        // Delay  after  the  beep/  beep  interval,  proportional  to
+        // distance from  ultrasonic sensor to obstacle.   Done, using
+        // linear mapping.
         for (uint16_t i = 0; i<delay; i++) {
             _delay_ms(1);
         }
@@ -214,15 +238,17 @@ int main(void)
         // Delay required for HC-SR04  ultrasonic`sensor so it doesn't
         // get triggers to fast.  That  is, the sensor needs a minimum
         // delay between trigger pulses to reset.
-        
+        //
         // Started  with a  200ms delay  so the  distance measurements
         // take longer  to aquire.   Hence, the sensor  distances give
         // the appearance of not measuring correctly.
-        //_delay_ms(20);
-
-
+        //
+        // _delay_ms();
+        //
+        // When using playsound(...) we get a >=50ms pulse here anyhow
+        // though so we don't need an extra delay here.
         
-    }
+    } // end: while(1)
 
     
 
