@@ -97,7 +97,8 @@ int main(void)
 
     // When we have  linear mapping we know that distance  vs delay is
     // linear over a feasible  distance.  Hence, the FEASIBLE DISTANCE
-    // is Dmin to Dmax.
+    // is Dmin to Dmax.  We  may get incorrect distance values outside
+    // that region.
 
     // Modulo 1
     //float Dmin = 100; // minimum feasible distance for ultrasonic sensor, mm.
