@@ -98,9 +98,13 @@ int main(void)
     // When we have  linear mapping we know that distance  vs delay is
     // linear over a feasible  distance.  Hence, the FEASIBLE DISTANCE
     // is Dmin to Dmax.
-    
-    float Dmin = 100; // minimum feasible distance for ultrasonic sensor, mm.
-    float Dmax = 150;// maximum feasible distance for ultrasonic sensor, mm.
+
+    // Modulo 1
+    //float Dmin = 100; // minimum feasible distance for ultrasonic sensor, mm.
+    //float Dmax = 150;// maximum feasible distance for ultrasonic sensor, mm.
+    // Modulo 3
+    float Dmin = 200; // minimum feasible distance for ultrasonic sensor, mm.
+    float Dmax = 250;// maximum feasible distance for ultrasonic sensor, mm.
     float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
     float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
 
