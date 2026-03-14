@@ -79,14 +79,30 @@ int main(void)
     // Ultrasonic  sensor  we  are  using is  the  HR-SR04,  with  the
     // following specification.
     //
-    float Dmin = 20; // minimum feasible distance for ultrasonic sensor, mm.
-    float Dmax = 4000;// maximum feasible distance for ultrasonic sensor, mm.
+    //float Dmin = 20; // minimum feasible distance for ultrasonic sensor, mm.
+    // float Dmax = 4000;// maximum feasible distance for ultrasonic sensor, mm.
 
-    // I think you can't hear the buzzer below a 10ms on high pulse.
+    // // I think you can't hear the buzzer below a 10ms on high pulse.
+    // float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
+    // float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
+
+    // Didn't sound good, same buzzzing frequency that is not easily
+    // distinguishable.  These are the feasible distances in the
+    // lecture notes.
+    //
+    // float Dmin = 20; // minimum feasible distance for ultrasonic sensor, mm.
+    // float Dmax = 200;// maximum feasible distance for ultrasonic sensor, mm.
+    // float buzzer_delay_min = 1; // maximum feasible buzzer delay, ms.
+    // float buzzer_delay_max = 20; // maximum feasible buzzer delay, ms.
+
+    // When we have  linear mapping we know that distance  vs delay is
+    // linear over a feasible  distance.  Hence, the FEASIBLE DISTANCE
+    // is Dmin to Dmax.
+    
+    float Dmin = 100; // minimum feasible distance for ultrasonic sensor, mm.
+    float Dmax = 150;// maximum feasible distance for ultrasonic sensor, mm.
     float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
     float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
-
-
 
     // Interface the the passive buzzer to arduino port.
     bitSet(*ddr_buzzer, pin_passive_buzzer);
@@ -207,13 +223,19 @@ int main(void)
         // number of us in a second.
         
         // Dmm in mm.
+        // float Dmm
+        //     = ((float)echo_high_us_count / 1.0e6)* velocity_of_sound / 2 * 1000;
         float Dmm
-            = ((float)echo_high_us_count / 1.0e6)* velocity_of_sound / 2 * 1000;
+            = 2 * ((float)echo_high_us_count / 1.0e6)* velocity_of_sound / 2 * 1000;
+        
 
         // Prepare  Dmm  for  input to  vscode  teleplot(plots  serial
         // character values output to the serial port).
-
-        // It must be in this format for teleplot to plot values.
+        //
+        // It  must be  in this  format for  TELEPLOT to  plot values.
+        // Name  of teleplot  can change  by RENAMING  >Dmm string  to
+        // something else, that is >SomethingElse.
+        //
         Serial.print(">Dmm:");
         Serial.println(Dmm, 6); // print Dmm to precision of 6 decimal points
         
@@ -230,6 +252,15 @@ int main(void)
         // Delay  after  the  beep/  beep  interval,  proportional  to
         // distance from  ultrasonic sensor to obstacle.   Done, using
         // linear mapping.
+        //
+        // We are trying to make a fast beep for a close object and a slow
+        // beep for a far object.
+        
+        // Why we  use linear mapping.  eg  a volume knob, as  we increace
+        // the volume  x steps we expect  a volume _increase_ that  is the
+        // same at 2x steps...
+
+
         for (uint16_t i = 0; i<delay; i++) {
             _delay_ms(1);
         }
@@ -305,22 +336,27 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
     // a  constant rate  of change  between  the input  range and  the
     // output range.
     
-    // We are trying to make a fast beep for a close object and a slow
-    // beep for a far object.
-
-    // Why we  use linear mapping.  eg  a volume knob, as  we increace
-    // the volume  x steps we expect  a volume _increase_ that  is the
-    // same at 2x steps...
-
     float delay;
     
-    // Clamp input so it stays in sensor range
+    // Clamp input so it stays in  sensor range.  If you SWAP Dmin and
+    // Dmax both clamping statements are true and Dmm, is always equal
+    // to Dmax.   Hence, you get a  constant value for delay  and thus
+    // beeping.
+    //
+    // eg Dmin=150 Dmax=100, swapped.
     if (Dmm < Dmin)
         Dmm = Dmin;
 
     if (Dmm > Dmax)
         Dmm = Dmax;
 
+    // Of we SWAP  buzzer_delay_max and buzzer_delay_min we  get a -ve
+    // slope.  Hence,  we get faster  beeping at longer  distances and
+    // slower beeping at shorter distances.   Thus for a small x delay
+    // is big and for  a bigger x delay is smaller.   Draw a -ve sloap
+    // graph to see this.
+
+    
     // Note: You lose precision with integer division because integers
     // cannot store  fractional parts. When two  integers are divided,
     // the result is truncated (the decimal part is discarded).
