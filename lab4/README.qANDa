@@ -1,0 +1,75 @@
+W4. Lab Tasks 2026
+Based on the demo in Pages 57-58 of Wk-3 lecture slides, implement below:
+
+(0.5  points) Upgrade  the  function “playSoundFor100ms()”  to let  it
+accept the play time as  a parameter playSoundForXms(float F, float x,
+int  playTime) being  able to  clearly explain  how playTime  works in
+controlling the actual note playing time.
+
+ANS: in the playSound() function the  buzzer is toggled on and off for
+one period.   So we need to  determine the number or  periods that fit
+into  the total  playing  time, playtime  variable,  and execute  that
+number of periods/toggle cycles required.
+
+
+
+1  points) Play  the notes  in  ‘note5[]’ again,  requiring change  to
+different frequencies from those in the  demo; refer to page 37 in the
+lecture slides.
+
+ANS: Start frequencies form C4, middle C, and continue for one octave.
+(Optional) Can you try to make the five notes sound pleasant?
+ANS: I think I have because I have implemented the C cromatic scale.
+
+
+
+The even-indexed  notes play  twice as long  as the  odd-indexed notes
+being able to  explain clearly the implementation logic  being able to
+explain how playing time is controlled.
+
+ANS: use modulo  operator % to determine the playtime,  and double the
+playtime for the odd indexed notes.
+
+
+
+Volume of buzzer increases gradually  over the five notes.  being able
+to explain  the principal for  volume control.  being able  to explain
+logic/methods of doing so.
+
+ANS: You vary the duty cycle, time_signal_high/period.  The higher say
+percentage  of duty  cycle  the lowder  the buzzer  as  more power  is
+delived to it.
+
+For all  tasks/subtasks, wherever applicable, bit  manipulation should
+be used and clearly explained; otherwise, penalty applies.  Arrays and
+pointers should be  used, and you are expected to  clearly explain how
+they work in your embedded C codes and design.
+ 
+
+Fun excercises: do you know you are capable of making a music box now?
+Feel  free to  check  below  music note  sequences,  and impress  your
+families and friends.
+
+Tune 1: 
+
+E E F G G F E D C C D E E D D
+E E F G G F E D C C D E D C C
+
+ 
+
+Tune 2:
+
+C C G G A A G F F E E D D C
+G G F F E E D G G F F E E D
+C C G G A A G F F E E D D C
+
+ 
+
+Tune 3: 
+
+G G A G C B
+G G A G D C
+G G G* E C B A
+F F E C D C
+
+ 

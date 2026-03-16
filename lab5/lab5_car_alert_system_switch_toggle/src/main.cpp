@@ -26,6 +26,14 @@
 #define pin_trigger PB0
 #define pin_echo PB1
 #define pin_passive_buzzer PC0
+// this is still a PWM port on the arduino, where PD0 and PD1 look
+// like Tx/Rx serial port comms
+#define pin_switch PD2
+// I am still going to use the onboard LED to indicate what state the
+// circuit is in.  Decided against it as not in spec and it uses port
+// B which I'm already using for the sonar
+#define led_onboard PB5
+
 
 
 
@@ -33,11 +41,17 @@ void playSound(float frequency, float duty_cycle, unsigned long playtime_us,
                volatile uint8_t *port_buzzer);
 float linear_mapping(float Dmm, float Dmin, float Dmax,
                      float buzzer_delay_min, float buzzer_delay_max);
-
+void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch,
+                     volatile uint8_t *port_switch_inputs,
+                     volatile uint8_t *ddr_sonar, volatile uint8_t *port_sonar,
+                     bool *system_on_off_toggle);
 
 // Measure  distance  to  an  obstacle using  the  HC-SR04  ultrasonic
 // sensor.  Then plot data to  vscode's teleplot.  Also, emit a buzzer
-// pulse to indicate you are measuring distances.
+// pulse to indicate you are measuring distances.  For obsicale closer
+// distance to  the sensor  the buzzer must  buzz more  frequently and
+// less  frequently as  you increace  the obstacle  distance from  the
+// sensor.
 
 int main(void)
 {
@@ -49,7 +63,7 @@ int main(void)
     // change to our code in these 3 lines, not having to change every
     // DDRB, PORTB... ports references in our code.
     
-    // Use atmega328p portB to interface to the ultrasonic sensor.
+    // Use atmega328p ports to interface to the ultrasonic sensor.
 
     // Volatile  type makes  sure that  the compiler  doesn't optimise
     // away the contents of the register.  It must always be read from
@@ -67,6 +81,13 @@ int main(void)
     volatile uint8_t *ddr_buzzer = &DDRC; 
     volatile uint8_t *port_buzzer = &PORTC;
 
+    // Interface of atmega328p ports to toggle on and off switch.
+    volatile uint8_t *ddr_switch = &DDRD; 
+    volatile uint8_t *port_switch = &PORTD;
+    volatile uint8_t *port_switch_inputs = &PIND;
+
+
+
     // WORKS:
     
     // float Dmin = 50; // minimum feasible distance for ultrasonic sensor, mm.
@@ -79,12 +100,17 @@ int main(void)
     // Ultrasonic  sensor  we  are  using is  the  HR-SR04,  with  the
     // following specification.
     //
-    //float Dmin = 20; // minimum feasible distance for ultrasonic sensor, mm.
-    // float Dmax = 4000;// maximum feasible distance for ultrasonic sensor, mm.
+    float Dmin = 20; // minimum feasible distance for ultrasonic sensor, mm.
+    float Dmax = 4000;// maximum feasible distance for ultrasonic sensor, mm.
 
+    // WRKS:
     // // I think you can't hear the buzzer below a 10ms on high pulse.
-    // float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
-    // float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
+    //float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
+    //float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
+
+    // Note: larger delays => slower beeps
+    float buzzer_delay_min = 40; // maximum feasible buzzer delay, ms.
+    float buzzer_delay_max = 3000; // maximum feasible buzzer delay, ms.
 
     // Didn't sound good, same buzzzing frequency that is not easily
     // distinguishable.  These are the feasible distances in the
@@ -103,13 +129,13 @@ int main(void)
     // Modulo 1
     //float Dmin = 100; // minimum feasible distance for ultrasonic sensor, mm.
     //float Dmax = 150;// maximum feasible distance for ultrasonic sensor, mm.
-    // Modulo 3
-    float Dmin = 200; // minimum feasible distance for ultrasonic sensor, mm.
-    float Dmax = 250;// maximum feasible distance for ultrasonic sensor, mm.
-    float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
-    float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
+    // // Modulo 3
+    // float Dmin = 200; // minimum feasible distance for ultrasonic sensor, mm.
+    // float Dmax = 250;// maximum feasible distance for ultrasonic sensor, mm.
+    // float buzzer_delay_min = 50; // maximum feasible buzzer delay, ms.
+    // float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
 
-    // Interface the the passive buzzer to arduino port.
+    // Interface the the passive buzzer to arduino output port.
     bitSet(*ddr_buzzer, pin_passive_buzzer);
 
     // Set pin  PB0, that is pin  0 of port  B to an output  port.  It
@@ -122,7 +148,19 @@ int main(void)
     // signal is the  signal returned when the trigger  signal hits an
     // obstacle.
     bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
+    bitSet(*port_sonar, pin_echo); // enable the pull up
 
+    // Configure pin as an input.  Then set it high as that enables
+    // its pullup resistor on the arduino pin.
+    bitClear(*ddr_switch, pin_switch);
+    bitSet(*port_switch, pin_switch);
+
+    // Configure pin 5 on port B, connected to the onboard LED, on the
+    // arduino uno r3, as an output port.
+    bitSet(*ddr_sonar, led_onboard);
+    bitClear(*port_sonar, led_onboard); // Start with the LED off
+
+    
     // Maximum  sensor measurment  distance is  5m. v=d/t,thus t/echo_high_us_count
     // needs  to  be  no  more than  2*5/343  sec  =  0.0292s=29200us.
     // log2(29200) ~=15  < 16 thus  a uint16_t is sufficient  to count
@@ -169,9 +207,31 @@ int main(void)
     // Much slower and the ultrasonic sensor triggers are too
     // infrequent or don't happen at all.
     unsigned long playtime_us = 10000; // 10ms
+
+    // When  the switch  is toggled  our program  runs or  stops after
+    // debounceing the  switch.  We start off  with the system/circuit
+    // off.
+    bool system_on_off_toggle = false;
+
     
 
     while (1) {
+
+        // Debounce the switch.
+        debounce_switch(ddr_switch, port_switch, port_switch_inputs,
+                        ddr_sonar, port_sonar, &system_on_off_toggle);
+
+        // If system/circuit is off skip everything.
+        if (!system_on_off_toggle){
+            continue;
+        }
+
+        // if (bitCheck(*port_switch_inputs, pin_switch)) {
+        //     continue;
+        // }
+
+        // System circuit runs only when button pressed.
+        
         echo_high_us_count = 0;
         timeout_counter = 30000;
         
@@ -340,6 +400,10 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
     // equation is constant.  So when  we use linear mapping, we apply
     // a  constant rate  of change  between  the input  range and  the
     // output range.
+
+    // To  get  slower  delays  you  need to  increase  the  slope  by
+    // increasion buzzer_delay_max.  So that you get bigger delays for
+    // more quickly for the same range of Dmax and Dmin.
     
     float delay;
     
@@ -372,3 +436,75 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
 
     return delay;
 }
+
+
+
+
+// Button pin debouncing.   We execute a delay of ms(amount  has to be
+// determined emperically  because every  button is different)  on the
+// transition  of the  button  form high-low  and  low-high.  On  each
+// transition  type  the onboard  led  is  toggled, high-low(OFF),  or
+// low-high(ON).
+
+void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch,
+                     volatile uint8_t *port_switch_inputs,
+                     volatile uint8_t *ddr_sonar, volatile uint8_t *port_sonar,
+                     bool *system_on_off_toggle){
+
+    // Must be persistant between calls in main()'s while loop.
+    static bool switch_status_old = 1;
+    bool switch_status;
+    
+    
+    // What  value is  where  we  have the  button  connected.  It  is
+    // intially high.  Wait for the transition from high-low to toggle
+    // switch, changing its state from its previous state.
+    switch_status = bitRead(*port_switch_inputs, pin_switch);
+
+    // Keep reading  switch_status with  the previous command  till it
+    // transitions from high-low or low-high.  That is when the switch
+    // is pressed or released.
+    if(switch_status != switch_status_old){
+
+        // Button has transitioned from high-low or low-high.
+
+        // Wait a while due to ringing signal on transition
+        // high-low or low-high.
+            
+        // You need to tune this delay  based on the unique button you
+        // have.  Mechanical switches roughly bounce for
+        // 5-20ms.
+        // not enough for my switch as occasionally i don't get a toggle
+        //_delay_ms(10);
+        _delay_ms(50);
+        switch_status = bitRead(*port_switch_inputs, pin_switch);
+
+
+        // If now after the wait for switch bouncing to stop on
+        // the transition and the pin has really changed state.
+        if (switch_status != switch_status_old){
+            //Serial.println("dbg: debounce_switch()): Transition detected");
+            switch_status_old = switch_status;
+
+            
+            // We only  toggle on the press  edge, high-low tansition.
+            // Not on both edges high-low and low-high.
+            
+            if(switch_status == 0){
+                //Serial.println("dbg: debounce_switch(): Button pressed");
+                // toggle the state of the led
+                bitInverse(*port_sonar, led_onboard);
+
+                // toggle system state/circuit on or off.
+                *system_on_off_toggle = !(*system_on_off_toggle);
+                // Serial.println(*system_on_off_toggle);
+                return;
+            }
+        }
+
+    } // end: if(switch_status != switch_status_old){
+       
+} // end: debounce_switch()
+
+
+

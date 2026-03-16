@@ -1,0 +1,67 @@
+W5. Lab Tasks 2026
+Published first on 08/03/2026; may be revised slightly per actual lecture delivery.
+
+ 
+
+(1 point) Implement a car alerting system, as demonstrated below, requiring 
+
+Hints: All components, including principals  and code demos, have been
+explained  in  lectures 3  and  4,  referring  to lecture  slides  and
+recordings please  for more  details.  The  smaller the  distance, the
+faster the buzzer beeps.
+
+
+
+Q: how to  realise the mapping; what if we  want slower buzzer beeping
+against smaller distance?
+
+ANS:   You   increae   the   buzzer   interval/delay   by   increasing
+buzzer_delay_max.   And thus  increasing the  slope of  your delay  vs
+distance  graph.  You  get  much  longer delays  more  quickly as  the
+distance increases.
+
+
+
+
+Q: Use the last  digit of your student ID, d,  to dermine the feasible
+range of distance, based on below
+
+if d modulo 4 is 0: distance is between 5cm and 10cm
+if it is 1: distance is between 10cm and 15cm
+if it is 2: distance is between 15cm and 20cm
+if it is 3: distance is between 20cm and 25cm
+
+ANS: I have modulo 3 so feasable range is 20cm=Dmin, 25cm=Dmax.
+Q: explain how you determine the feasible range - use the modulo operator.
+
+Plot the  distance results  through Teleplot, and  show the  real time
+plotting at marking so that we know the actual distance.
+NOTE: sudo dmesg -w to make sure your connected to the correct port in teleplot.
+
+Q: Explain how to make Teleplot plot the serial data.
+ANS: You put Serial.print(">Dmm"), Serial.println() in your code.
+
+Q: how to rename the plotting variable?
+ANS: Serial.print(">Distance")
+
+Implement feasibility guarantee. See lab5_car_elert_system
+Q: explain how to ensure this.
+
+ANS: You need to set Dmin, Dmax and Delay_min and Delay_max for linear
+mapping feasibility guarantee.
+
+
+Customise your own  feasible range of delay for beeping  speed to make
+the changing  over the distance easily  differentiable as demonstrated
+in the video.
+ANS: See lab5_car_alert_system_HC-SR04-spec
+
+
+(1 points) Add a pushbutton, to turn off/off the alerting system, requiring
+
+The pusbbutton is well debounced: out of ten pressings, the pushbutton
+precisely acts as expected, with up to two misactions allowed
+
+Q: What is  the mechanish  for  pushbutton debouncing?
+Q: What is  your bouncing time?
+Q: Will the bouncing time change if a different pushbutton is used? how will it change?
