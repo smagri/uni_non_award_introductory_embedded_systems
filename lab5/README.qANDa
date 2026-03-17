@@ -18,7 +18,8 @@ against smaller distance?
 ANS:   You   increae   the   buzzer   interval/delay   by   increasing
 buzzer_delay_max.   And thus  increasing the  slope of  your delay  vs
 distance  graph.  You  get  much  longer delays  more  quickly as  the
-distance increases.
+distance   increases.    Given   Dmin   Dmax   stay   the   same   and
+buzzer_delay_min also stays the same.
 
 
 
@@ -39,10 +40,13 @@ plotting at marking so that we know the actual distance.
 NOTE: sudo dmesg -w to make sure your connected to the correct port in teleplot.
 
 Q: Explain how to make Teleplot plot the serial data.
-ANS: You put Serial.print(">Dmm"), Serial.println() in your code.
+ANS: You put Serial.print(">Dmm:"); Serial.println() in your code.
+
+AND:"> and : and \n", Serial.println() gives you \n. Must be there,
+where Dmm is the name of the variable and can be anything.
 
 Q: how to rename the plotting variable?
-ANS: Serial.print(">Distance")
+ANS: Serial.print(">Distance:")
 
 Implement feasibility guarantee. See lab5_car_elert_system
 Q: explain how to ensure this.
@@ -54,14 +58,25 @@ mapping feasibility guarantee.
 Customise your own  feasible range of delay for beeping  speed to make
 the changing  over the distance easily  differentiable as demonstrated
 in the video.
-ANS: See lab5_car_alert_system_HC-SR04-spec
+ANS: See lab5_car_alert_system_HC-SR04-spec -OLD wrt comments and code
+ANS: See lab5_car_alert_system_switch_toggle/
 
-
-(1 points) Add a pushbutton, to turn off/off the alerting system, requiring
+(1 points) Add a pushbutton, to turn on/off the alerting system, requiring
 
 The pusbbutton is well debounced: out of ten pressings, the pushbutton
 precisely acts as expected, with up to two misactions allowed
 
-Q: What is  the mechanish  for  pushbutton debouncing?
+Q: What is the mechanish for pushbutton debouncing?
+
+ANS: Signal  high-low and low-high transitions  produce noise/ringing.
+Detect when  the tansition  occurs and apply  a delay,  _delay_ms() in
+your code, an estimate of when the debouncing stops.
+
 Q: What is  your bouncing time?
-Q: Will the bouncing time change if a different pushbutton is used? how will it change?
+50ms
+
+Q: Will the bouncing time change if a different pushbutton is used?
+how will it change?
+
+ANS: Yes, as each new switch is a mechanical thing which would vary in
+the production process.

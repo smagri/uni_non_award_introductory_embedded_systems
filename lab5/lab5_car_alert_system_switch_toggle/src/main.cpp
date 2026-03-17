@@ -297,9 +297,9 @@ int main(void)
         // Prepare  Dmm  for  input to  vscode  teleplot(plots  serial
         // character values output to the serial port).
         //
-        // It  must be  in this  format for  TELEPLOT to  plot values.
-        // Name  of teleplot  can change  by RENAMING  >Dmm string  to
-        // something else, that is >SomethingElse.
+        // It must be in this format for TELEPLOT to plot values.
+        // Name of teleplot can change by RENAMING Dmm string to
+        // something else, that is >SomethingElse:\n
         //
         Serial.print(">Dmm:");
         Serial.println(Dmm, 6); // print Dmm to precision of 6 decimal points
@@ -440,11 +440,10 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
 
 
 
-// Button pin debouncing.   We execute a delay of ms(amount  has to be
-// determined emperically  because every  button is different)  on the
-// transition  of the  button  form high-low  and  low-high.  On  each
-// transition  type  the onboard  led  is  toggled, high-low(OFF),  or
-// low-high(ON).
+// Button/switch pin debouncing.  We execute  a delay of ms(amount has
+// to be determined emperically because  every button is different) on
+// the transition of  the button form high-low and  low-high to factor
+// in the the noise/ringing on the signal at the transitions.
 
 void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch,
                      volatile uint8_t *port_switch_inputs,
@@ -489,7 +488,6 @@ void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch
             
             // We only  toggle on the press  edge, high-low tansition.
             // Not on both edges high-low and low-high.
-            
             if(switch_status == 0){
                 //Serial.println("dbg: debounce_switch(): Button pressed");
                 // toggle the state of the led
