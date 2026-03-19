@@ -1,0 +1,19 @@
+Functionally speaking, what need to be initialised for this lab.
+ANS:
+Baud Rate for communiction btw MCU and PC.
+RxTx buffer
+
+
+When sending a string from MCU to PC, how to know when to stop sending.
+ANS:
+
+
+When reading a string from PC in MCU, how to know when to stop reciving.
+ANS:
+
+
+How numbers are transmitted from PC to MCU?
+ANS:
+
+How numbers are transmitted from MCU to PC?
+ANS:
