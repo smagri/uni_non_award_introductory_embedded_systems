@@ -4,9 +4,11 @@
 
 //#include <Arduino.h> // for debugging only
 #include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <util/delay.h>
 #include <math.h>
 
 
@@ -41,7 +43,8 @@ void usart_send_byte(unsigned char data);
 void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
 void print_math_fn_menu(void);
-
+void process_user_input(int8_t user_choice);
+    
 
 
 // Global definitions, hence available to all functions.
@@ -68,6 +71,8 @@ int main(void){
 
     
     while (1) {
+        usart_flush(); // Clear out the RX register to prevent false reading.
+        
         print_math_fn_menu();
         
         usart_flush(); // Clear out the RX register to prevent false reading.
@@ -76,25 +81,27 @@ int main(void){
         // buffer.
         usart_read_string(ptr_to_usart_buffer);
 
-        // if (flag_read_done){
-        //     // Debugging, Echo input to the screen.
-        //     usart_send_string(usart_buffer);
-        //     usart_send_byte('\n');
-        //     flag_read_done = 0;
-        // }
-        // usart_flush(); // Clear out the RX buffer.
-        // _delay_ms(10);
-
         
-        // Convert input string into an integer.
-        //
-        // note: atoi() expects a null - terminated string.
-        user_choice = atoi(usart_buffer);
-        usart_send_string("dbg: main(): User_choice is: ");
-        usart_send_num(user_choice, 1, 0);
-        usart_send_byte('\n'); // send EOL, CRLF
+        // Check if it's  exactly one digit 1–9 by  checking the ASCII
+        // numbers.  Also,  reject non single character  entries, such
+        // decimals and outside range ascii characters.
+        if ( (usart_buffer[0]<'1')
+             || (usart_buffer[0]>'9')
+             || (usart_buffer[1]!='\0') ){
+            usart_send_string("Invalid selection. Try again\n");
+            continue;
+        }
+        else{
+            // Convert input string into an integer.
+            //
+            // note: atoi() expects a null - terminated string.
+            user_choice = atoi(usart_buffer);
+            // usart_send_string("dbg: main(): User_choice is: ");
+            // usart_send_num(user_choice, 1, 0);
+            // usart_send_byte('\n'); // send EOL, CRLF
+        }
         
-        //process_user_input(user_choice);
+        process_user_input(user_choice);
         
     } // end: while(1)
     
@@ -267,17 +274,20 @@ void usart_send_num(float num, char num_int, char num_decimal){
 
 void print_math_fn_menu(void){
 
-    usart_send_string("Enter a number corresponding to the math fn you want to");
-    usart_send_string(" perform on your number/s, x and/or y.\n");
-    usart_send_string("1. abs(x)\n");
-    usart_send_string("2. fabs(x)\n");
-    usart_send_string("3. pow(x, y)\n");
-    usart_send_string("4. sqrd(x)\n");
-    usart_send_string("5. exp(x)\n");
-    usart_send_string("6. log(x)\n");
-    usart_send_string("7. log10(x)\n");
-    usart_send_string("8. ceil(x)\n");
-    usart_send_string("9. floor(x)\n");
+    // Output the menu, of mathamatical functions that can be
+    // performed, to the serial monitor.
+    
+    usart_send_string("\nEnter a number corresponding to the math fn you want");
+    usart_send_string(" to perform on your number/s, x and/or y.\n");
+    usart_send_string("1. abs(x), where x is an integer.\n");
+    usart_send_string("2. fabs(x), where x can be a float.\n");
+    usart_send_string("3. pow(x, y), x^y.\n");
+    usart_send_string("4. sqrt(x), square root of x.\n");
+    usart_send_string("5. exp(x), e^x, e approx =2.71828, Euler's number.\n");
+    usart_send_string("6. log(x), natural logarithm, what to raise e to, to get x\n");
+    usart_send_string("7. log10(x), what do raise 10 to, to get x.\n");
+    usart_send_string("8. ceil(x), rounds UP to the nearest integer.\n");
+    usart_send_string("9. floor(x), rounds DOWN to the nearest integer\n");
     
 }
 
@@ -285,52 +295,97 @@ void print_math_fn_menu(void){
 
 void process_user_input(int8_t user_choice){
 
-    int first_number , second_number;
+    // Numbers entered by user after user choosing a mathematical
+    // operation to perform on them.
+    float first_number , second_number;
+
+    // Converted number after mathematical operation performed.  Kept
+    // as a float as usart_send_num(float num....) expects this.
+    //
+    // usart_send_num(float num, char num_total_chars, char num_decimal_places)
+    float number;
+
+    uint8_t max_field_width_num = 10;
+    uint8_t num_decimal_places = 6;
         
-
-
-    if ( !((user_choice>=0) && (user_choice<=9)) ){
-        usart_send_string("Invalid selection. Try again");
-        return;
-    }
 
     usart_send_string("\nEnter first number: ");
-    usart_flush();
+    usart_flush(); // Get junk out of MCU RX buffer
     usart_read_string(ptr_to_usart_buffer);
-    // dbg: display back to PC serial port monitor
-    usart_send_string(usart_buffer);
-    usart_send_byte('\n'); // note: must send a character constant not a string.
-        
     first_number = atoi(ptr_to_usart_buffer);
-    usart_send_string("dbg: process_user_input(): First number: ");
-    usart_send_num(first_number, 1, 0);
-    usart_send_byte('\n');
+    //usart_send_string("dbg: process_user_input(): First number: ");
+    //usart_send_num(first_number, 1, 0);
+    //usart_send_byte('\n');
+    
 
     if(user_choice == 3){
         usart_send_string("Enter second number: ");
         usart_flush();
         usart_read_string(ptr_to_usart_buffer);
-        usart_send_string(usart_buffer);
-        usart_send_byte('\n');
-
         second_number = atoi(ptr_to_usart_buffer);
-        usart_send_string("dbg: process_user_input(): Second number: ");
-        usart_send_num(second_number, 3, 0);
-        usart_send_byte('\n');
     }
 
-    //bool flag_print = 1;
+
 
     switch (user_choice) {
         case 1: {
-            usart_send_string("dbg: process_user_input() abs()=");
-            usart_send_num(abs(first_number), 5, 2);
-            usart_send_byte('\n');
+            usart_send_string("Absolute value, abs(x), is = ");
+            number = fabs(first_number);
+            //usart_send_string("Absolute value, abs(");
+            //usart_send_num(first_number, max_field_width_num, num_decimal_places);
+            //number = abs(first_number);
+            //usart_send_string(") is = ");
+            //usart_send_num(number, max_field_width_num, num_decimal_places);
+            //usart_send_byte('\n'); // CRLF or EOL
+            break;
+        }
+        case 2: {
+            usart_send_string("Absolute value, fabs(x), is = ");
+            number = fabs(first_number);
+            break;
+        }
+        case 3: {
+            usart_send_string("x^y, pow(x,y), is = ");
+            number = pow(first_number, second_number);
+            break;
+        }
+        case 4: {
+            usart_send_string("Square Root, sqrt(x), is = ");
+            number = sqrt(first_number);
+            break;
+        }
+        case 5: {
+            usart_send_string("Exponential, exp(x), is = ");
+            number = exp(first_number);
+            break;
+        }
+        case 6: {
+            usart_send_string("Natural Logarithm, log(x), is = ");
+            number = log(first_number);
+            break;
+        }
+        case 7: {
+            usart_send_string("Common Logarithm, log10(x), is = ");
+            number = log10(first_number);
+            break;
+        }
+        case 8: {
+            usart_send_string("Ceiling, ceil(x), is = ");
+            number = ceil(first_number);
+            break;
+        }
+        case 9: {
+            usart_send_string("Floor value, floor(x), is = ");
+            number = floor(first_number);
             break;
         }
         default:
             break;
-    }
+            
+    } // end: switch()
+
+    usart_send_num(number, max_field_width_num, num_decimal_places);
+    usart_send_byte('\n'); // CRLF or EOL
     
         
 
