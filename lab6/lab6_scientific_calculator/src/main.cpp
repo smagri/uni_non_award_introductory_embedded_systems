@@ -37,6 +37,7 @@
 // Function prototypes
 void usart_init(float baud_rate);
 void usart_init_v2(float baud_rate);
+void usart_init_claude(float baud_rate);
 void usart_flush(void);
 void usart_read_string(char *ptr_to_str);
 void usart_send_byte(unsigned char data);
@@ -60,8 +61,9 @@ bool flag_read_done = 0;
 
 
 int main(void){
-    
-    usart_init_v2(19200);
+
+    usart_init_claude(19200);
+    //usart_init_v2(19200);
     //usart_init_v2(9600);
     //usart_init(9600);
     _delay_ms(100);
@@ -113,12 +115,18 @@ int main(void){
 
 // checked
 void usart_init(float baud_rate){
-    // Fosc is 16MHz, so this would work too, I prefer to be more explicit.
-    //float ubrr0 = (1.0e6 / baud_rate) - 1;
+
+    // USE Claude Haiku 4.5 version of this fn as it makes settings more clear:
+    //
+    // Fosc, internal Crystal Arduino r3 = 16MHz
+    // ubrr0 = (Fosc/prescale factor * baud rate) - 1
+    // U2Xn=0, prescale factor is 2/4/2=16
+    // U2Xn=1, prescale factor is 2/4=8
     
     float ubrr0 = ( (F_CPU / (16.0 * baud_rate)) - 1);
     int ubrr0a = (int)ubrr0;
 
+    // Round up if neccessary to the next integer.
     if (ubrr0 - ubrr0a >= 0.5) {
         ubrr0a = ubrr0a + 1;
     }
@@ -129,27 +137,37 @@ void usart_init(float baud_rate){
     
 } // end: usart_init()
 
-// Perhaps safer according to claude haiku 4.5
-// void usart_init(float baud_rate){
-//     float ubrr0 = ( (F_CPU / (16.0 * baud_rate)) - 1);
-//     int ubrr0a = (int)ubrr0;
 
-//     if (ubrr0 - ubrr0a >= 0.5) {
-//         ubrr0a = ubrr0a + 1;
-//     }
+void usart_init_claude(float baud_rate){
 
-//     // Set baud rate
-//     UBRR0 = ubrr0a;
+    // USE Claude  Haiku 4.5 version of  this fn as it  makes settings
+    // more clear:
+    //
+    // Fosc, internal Crystal Arduino r3 = 16MHz
+    // ubrr0 = (Fosc/prescale factor * baud rate) - 1
+    // U2Xn=0, prescale factor is 2/4/2=16
+    // U2Xn=1, prescale factor is 2/4=8
     
-//     // Enable transmitter and receiver
-//     UCSR0B = (1 << TXEN0) | (1 << RXEN0);
+    float ubrr0 = ( (F_CPU / (16.0 * baud_rate)) - 1);
+    int ubrr0a = (int)ubrr0;
+
+    // Round up if neccessary to the next integer.
+    if (ubrr0 - ubrr0a >= 0.5) {
+        ubrr0a = ubrr0a + 1;
+    }
+
+    // Set baud rate
+    UBRR0 = ubrr0a;
     
-//     // Set frame format: 8 bit data, 1 stop bit, no parity
-//     UCSR0C = (0 << UMSEL01) | (0 << UMSEL00) |  // Async mode
-//              (0 << UPM01) | (0 << UPM00) |        // No parity
-//              (0 << USBS0) |                       // 1 stop bit  
-//              (1 << UCSZ01) | (1 << UCSZ00);       // 8-bit character
-// }
+    // Enable transmitter and receiver
+    UCSR0B = (1 << TXEN0) | (1 << RXEN0);
+    
+    // Set frame format: 8 bit data, 1 stop bit, no parity
+    UCSR0C = (0 << UMSEL01) | (0 << UMSEL00) |  // Async mode
+             (0 << UPM01) | (0 << UPM00) |        // No parity
+             (0 << USBS0) |                       // 1 stop bit  
+             (1 << UCSZ01) | (1 << UCSZ00);       // 8-bit character
+}
 
 
 // checked // compiled
@@ -179,31 +197,23 @@ void usart_flush(void){
 // checked
 void usart_read_string(char *ptr){
 
-    // UDR0 is the RX data I/O register of the arduino.  When the flag
-    // RXC0 is set in the UCR0A(Control and Status Register A) data is
-    // ready  to be  read  from  the RX  buffer(UDR0).   When RXC0  is
-    // cleared in the UCR0A register the RX buffer(UDR0), is empty.
+    // UDR0 is the  TX/RX data I/O register of the  arduino.  When the
+    // flag RXC0  is set in  the UCR0A(Control and Status  Register A)
+    // data is ready  to be read from the RX  buffer(UDR0).  When RXC0
+    // is cleared in the UCR0A register the RX buffer(UDR0), is empty.
 
     char tmp;
 
     // Continue  reading bytes/characters  from the  RX buffer  of the
     // arduino MCU till EOL is found.   The data comes from the serial
-    // monitor on my PC.
+    // monitor on my PC as ASCII characters.
     while (1) {
 
         // Block/wait till the user sends something.  Kai's code
         while (!bitCheck(UCSR0A, RXC0))
             ;            
 
-        // Debugging code.
-        // while (1) {
-        //     if (bitCheck(UCSR0A, RXC0)) {
-        //         char c  = UDR0;
-        //         usart_send_byte(c); // echo immediately
-        //     }
-        // }
-        
-        tmp = UDR0; // RX I/O register, or data buffer.
+        tmp = UDR0; // TX/RX I/O register, or data buffer.
 
         // Echo immediately to see if RXC0 os beomg set/
         // usart_send_byte(tmp);
@@ -233,24 +243,33 @@ void usart_read_string(char *ptr){
 
 
 
-// checked
+
 void usart_send_byte(unsigned char data){
+
+    // Send a byte  when the UDRE0(USART data register  empty flag) id
+    // is set.  In the UCSR0A (UART contorl or status register A).  It
+    // means that the USART data register is empty.
+    
     while (!bitCheck(UCSR0A, UDRE0))
         ;
-    UDR0 = data;
+    UDR0 = data; 
 }
 
 
-// checked
 
 // check if const is really needed, cgpt says c++ compiler is strictor
 // than c compiler.
 void usart_send_string(const char *pstr){
-    // note: const means a read-only-string, prevents accidentally
-    // modifying string literals(which causes crashes).
+    
+    // note:  const means  a  read-only-string, prevents  accidentally
+    // modifying  string   literals(which  causes   crashes).   String
+    // literals in c  are a sequence of characters  enclosed in double
+    // quotes, that is, an constant  array of characters that are null
+    // terminated, ie '\0' terminated.
 
-    // Send each byte, one at a time, till the string terminator \0 is
-    // sent.
+    // Send each byte, one at a  time, till the string terminator '\0'
+    // is  sent.  '\0'  is literally  the numeric  value 0  written in
+    // character form(NULL ACSII character).
     while (*pstr != '\0') {
         usart_send_byte(*pstr);
         pstr++;
@@ -258,8 +277,16 @@ void usart_send_string(const char *pstr){
 }
 
 
-// checked
+
 void usart_send_num(float num, char num_int, char num_decimal){
+
+    // Send a number from MCU to PC by converting it to a string.
+
+    // dtostrf(num,  width, precision,  string) converts  float to  an
+    // ASCII string.  We add a string  terminator '\0' so the PC knows
+    // when we are at the end of a string).
+
+    
     char str[20];
     if (num_decimal == 0)
         dtostrf(num, num_int, num_decimal, str);
@@ -284,13 +311,12 @@ void print_math_fn_menu(void){
     usart_send_string("3. pow(x, y), x^y.\n");
     usart_send_string("4. sqrt(x), square root of x.\n");
     usart_send_string("5. exp(x), e^x, e approx =2.71828, Euler's number.\n");
-    usart_send_string("6. log(x), natural logarithm, what to raise e to, to get x\n");
+    usart_send_string("6. log(x), na1tural logarithm, what to raise e to, to get x\n");
     usart_send_string("7. log10(x), what do raise 10 to, to get x.\n");
     usart_send_string("8. ceil(x), rounds UP to the nearest integer.\n");
     usart_send_string("9. floor(x), rounds DOWN to the nearest integer\n");
     
 }
-
 
 
 void process_user_input(int8_t user_choice){
@@ -307,12 +333,26 @@ void process_user_input(int8_t user_choice){
 
     uint8_t max_field_width_num = 10;
     uint8_t num_decimal_places = 6;
+
+    // Lets you see  where your input string parsing  stopped, in case
+    // of non-numeric number input.
+    //
+    // That is, if not NULL a  pointer to the character after the last
+    // character  used in  the conversion  in stored  in the  location
+    // referenced by it.
+    char *end_str_ptr;
         
 
     usart_send_string("\nEnter first number: ");
     usart_flush(); // Get junk out of MCU RX buffer
     usart_read_string(ptr_to_usart_buffer);
-    first_number = atoi(ptr_to_usart_buffer);
+    first_number = strtod(ptr_to_usart_buffer, &end_str_ptr);
+    if( (end_str_ptr == ptr_to_usart_buffer) || (*end_str_ptr !='\0') ){
+        // No conversion happened or you typed junk after number.
+        usart_send_string("Invalid input number. Try again\n");
+        return;
+    }
+    
     //usart_send_string("dbg: process_user_input(): First number: ");
     //usart_send_num(first_number, 1, 0);
     //usart_send_byte('\n');
@@ -322,7 +362,12 @@ void process_user_input(int8_t user_choice){
         usart_send_string("Enter second number: ");
         usart_flush();
         usart_read_string(ptr_to_usart_buffer);
-        second_number = atoi(ptr_to_usart_buffer);
+        second_number = strtod(ptr_to_usart_buffer, &end_str_ptr);
+        if( (end_str_ptr == ptr_to_usart_buffer) || (*end_str_ptr !='\0') ){
+            // No conversion happened or you typed junk after number.
+            usart_send_string("Invalid input number. Try again\n");
+            return;
+        }
     }
 
 
@@ -330,7 +375,7 @@ void process_user_input(int8_t user_choice){
     switch (user_choice) {
         case 1: {
             usart_send_string("Absolute value, abs(x), is = ");
-            number = fabs(first_number);
+            number = abs( ((int)first_number) );
             //usart_send_string("Absolute value, abs(");
             //usart_send_num(first_number, max_field_width_num, num_decimal_places);
             //number = abs(first_number);

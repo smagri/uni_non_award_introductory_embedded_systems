@@ -1,19 +1,99 @@
 Functionally speaking, what need to be initialised for this lab.
 ANS:
-Baud Rate for communiction btw MCU and PC.
-RxTx buffer
+
+Baud Rate for communiction btw MCU and PC agreed apon.
+
+For Asynchronous transmition:
+The UBRR0(Usart Baud Rate Register)  register needs to be populated with:
+------------------------------------------------------------------------
+float ubrr0 = ( (F_CPU / (16.0 * baud_rate)) - 1); when U2X0=0.
+OR
+float ubrr0 = ( (F_CPU / (8.0 * baud_rate)) - 1); when U2X0=1
+
+UBRR0 set to an integer:
+-----------------------
+UBRR0A to be setup:
+
+UBRR0A = UBRR0 cast to an int.
+
+If UBRR0A  is set  with a  rounded up/down number  to get  the closest
+integer.
+
+Then UBRR0 = UBRR0A, UBRR0 is set to an int.
+
+
+
+BitSettings():
+-----------
+
+USART CSR0B(Control and Status Register B).
+------------------------------------------
+Set bit TXEN0(TX/Transmitter Enable)
+Set bit RXEN0(RX/Reciver Enable)
+
+
+UCSR0C bits need to be set.  It controls data bits, parity, stop bits:
+---------------------------------------------------------------------
+
+UCSR0C |= 3 << UCSZ00 sets UCSZ00 amd UCSZ01.
+Thus UCSR0C becomes => 8bit data transmission:
+UCSZ02		UCSZ01 UCSZ00
+0(in USR0B)	1	1
+
+This leaves the rest of UCSR0C in default mode:
+UMSEL01=0 UMSEL00=0 => Asynchronous USART.
+UPM01=0 UPM00=0 => Parity Mode Disabled
+USBS0=0 => 1 Stop Bit.
+
+
+USE Claude Haiku 4.5 version of this fn as it makes settings more clear:
+Fosc, internal Crystal Arduino r3 = 16MHz
+ubrr0 = (Fosc/prescale factor * baud rate) - 1
+U2Xn=0, prescale factor is 2/4/2=16
+U2Xn=1, prescale factor is 2/4=8
+
 
 
 When sending a string from MCU to PC, how to know when to stop sending.
-ANS:
+
+ANS:  When the null terminator character ie '\0' is reached.
+
 
 
 When reading a string from PC in MCU, how to know when to stop reciving.
+
 ANS:
+Then  you have  to check  wether you  got an  '\r'(carrige return)  or
+'\n'(newline character/line  feed) Make sure that  your serial monitor
+is set up for sending a CRLF.
+
+You must  make sure the RXC0  bit is set in  the UCSR0A(Control Status
+Register A) to indicate there is unread data in the receive buffer, it
+is cleared when the receive buffer is empty.
+
 
 
 How numbers are transmitted from PC to MCU?
-ANS:
+
+ANS: They are sent as ASCII text.   One character at a time, eg '1' ==
+0x31 in ASCII.  In the MCU  atmega328p stores the recived byte in UDR0
+I/O  register.  When  the RXC0  is  set there  is unread  data in  the
+receive buffer.  UDR0(USART Data Register) is ready for reading.  Then
+you  use a  function like  atoi()/atof() to  convert the  ASCII to  an
+integer/float value.  Then RXC0 is cleared when the buffer is empty.
+
+
+
 
 How numbers are transmitted from MCU to PC?
-ANS:
+
+ANS: usart_send_num() sends data from the MCU to the PC.  It writes to
+the transmit  register, USART TX/RX IO  register, register UDRE0(Usart
+Data Register  Empty) flag is  set in the  UCSR0A.  TXEN0 needs  to be
+set.
+
+dtostrf(num,  width, precision,  string)  converts float  to an  ASCII
+string.  We add a  string terminator '\0' so the PC  knows when we are
+at the end of a string).
+
+Then send the null terminated string to the PC.
