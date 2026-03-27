@@ -33,16 +33,15 @@
 
 void usart_init(float baud_rate);
 void usart_flush(void);
-void usart_read_string(char *ptr_to_str);
 void usart_send_byte(unsigned char data);
 void usart_send_string(const char *ptr_to_str);
-void usart_send_num(float num, char num_int, char num_decimal);
 void print_led_status_fn_menu();
-void process_user_input(int8_t user_choice);
-
+void process_user_input(int8_t user_choice,  volatile uint8_t *port_output_led);
 
 // Global definitions, hence available to all functions.
 #define BUFFER_SIZE 50
+
+#define pin_led PB0
 
 // Our program buffer  that stores TX/RX data for the  Arduino that we
 // want to transmit from MCU->PC or recive data from the PC->MCU.
@@ -50,22 +49,35 @@ void process_user_input(int8_t user_choice);
 // all elements of usart_buffer is assgined to 0
 char usart_buffer[BUFFER_SIZE] = {0};
 char *ptr_to_usart_buffer = usart_buffer;
+volatile bool flag_rx_done = 0;
+
 
 
 ISR(USART_RX_vect){
 
-
-    // This can't block???
-    // Do I initialise the interrupt RX here???
+    // We have recived the interrupt indicating the RX buffer contains
+    // data.  However, first  we need to enable the  interrupt for the
+    // RXCIE0 in UCSR0B.
     
-    // Blocks waiting for user input. Value stored in USART RX
-    // buffer.
-    usart_read_string(ptr_to_usart_buffer);
+    char tmp = UDR0;
+
+    //usart_send_string("\ndbg: USART_RX_vect(): in ISR\n");
+
+    if (flag_rx_done == 0){
+
+        // If we  have reached the end  of string sent from  the PC to
+        // the MCU. Terminate the string as per C standard.  Otherwise
+        // put the UDRO RX data into our usart_buffer.
+        if ( (tmp == '\r') || (tmp == '\n') ){
+            *ptr_to_usart_buffer = '\0';
+            flag_rx_done = 1;
+        }
+        else{
+            *ptr_to_usart_buffer++ = tmp;
+        }
+        
+    }
 }
-
-
-
-ISR(USART_RX_vect);
 
 
 
@@ -76,43 +88,56 @@ int main( )
 
     uint8_t user_choice;
 
-    sei(); // Enable global interrupt
+    sei(); // Enable global interrupts
 
+    // Setup the arduino output pin for the LED.
+    volatile uint8_t *ddr_led = &DDRB;
+    volatile uint8_t *port_output_led = &PORTB;
+    
+    bitSet(*ddr_led, pin_led);
+    bitClear(*port_output_led, pin_led);
+
+    print_led_status_fn_menu();
+
+    
     while (1) {
 
+        if (flag_rx_done){
 
-        
-        usart_flush(); // Clear out the RX register to prevent false reading.
-        
-        print_led_status_fn_menu();
-                                                                                                 
-        usart_flush(); // Clear out the RX register to prevent false reading.
-        
-        // Blocks waiting for user input. Value stored in USART RX
-        // buffer.
-        usart_read_string(ptr_to_usart_buffer);
+            // Check if it's  exactly one digit 1–9 by  checking the ASCII
+            // numbers.  Also,  reject non single character  entries, such
+            // decimals and outside range ascii characters.
+            if ( (usart_buffer[0]<'0')
+                 || (usart_buffer[0]>'1')
+                 || (usart_buffer[1]!='\0') ){
+                usart_send_string("Invalid selection. Try again\n");
 
-        
-        // Check if it's  exactly one digit 1–9 by  checking the ASCII
-        // numbers.  Also,  reject non single character  entries, such
-        // decimals and outside range ascii characters.
-        if ( (usart_buffer[0]<'0')
-             || (usart_buffer[0]>'1')
-             || (usart_buffer[1]!='\0') ){
-            usart_send_string("Invalid selection. Try again\n");
-            continue;
+                // Get the next byte from the RX buffer.
+                ptr_to_usart_buffer = usart_buffer;
+                flag_rx_done = 0;
+                
+                print_led_status_fn_menu();
+                
+                continue;
+            }
+            else{
+                // Convert input string into an integer.
+                //
+                // note: atoi() expects a null - terminated string.
+                user_choice = atoi(usart_buffer);
+            }
+
+            process_user_input(user_choice, port_output_led);
+
+
+            // Get the next byte from the RX buffer.
+            ptr_to_usart_buffer = usart_buffer;
+            flag_rx_done = 0;
+
+            print_led_status_fn_menu();
+            
+            //usart_flush();
         }
-        else{
-            // Convert input string into an integer.
-            //
-            // note: atoi() expects a null - terminated string.
-            user_choice = atoi(usart_buffer);
-            // usart_send_string("dbg: main(): User_choice is: ");
-            // usart_send_num(user_choice, 1, 0);
-            // usart_send_byte('\n'); // send EOL, CRLF
-        }
-        
-        process_user_input(user_choice);
 
     } // end: while
         
@@ -142,14 +167,16 @@ void usart_init(float baud_rate){
     // Set baud rate
     UBRR0 = ubrr0a;
     
-    // Enable transmitter and receiver
-    UCSR0B = (1 << TXEN0) | (1 << RXEN0);
+    // Enable transmitter and receiver and the Interrupt Service
+    // Routine on the RX buffer.
+    UCSR0B = (1 << TXEN0) | (1 << RXEN0) | (1 << RXCIE0);
     
     // Set frame format: 8 bit data, 1 stop bit, no parity
     UCSR0C = (0 << UMSEL01) | (0 << UMSEL00) |  // Async mode
              (0 << UPM01) | (0 << UPM00) |        // No parity
              (0 << USBS0) |                       // 1 stop bit  
              (1 << UCSZ01) | (1 << UCSZ00);       // 8-bit character
+
 }
 
 
@@ -168,55 +195,6 @@ void usart_flush(void){
 
 
 
-void usart_read_string(char *ptr){
-
-    // The ISR USART_RX_vect has been called.  No blocking allowed.
-
-    // UDR0 is the  TX/RX data I/O register of the  arduino.  When the
-    // flag RXC0  is set in  the UCR0A(Control and Status  Register A)
-    // data is ready  to be read from the RX  buffer(UDR0).  When RXC0
-    // is cleared in the UCR0A register the RX buffer(UDR0), is empty.
-
-    char tmp;
-
-    // Continue  reading bytes/characters  from the  RX buffer  of the
-    // arduino MCU till EOL is found.   The data comes from the serial
-    // monitor on my PC as ASCII characters.
-
-    // Wait till the user sends something.
-    if (!bitCheck(UCSR0A, RXC0))
-        return;
-    
-    
-
-        tmp = UDR0; // TX/RX I/O register, or data buffer.
-
-        // Echo immediately to see if RXC0 os beomg set/
-        // usart_send_byte(tmp);
-
-        // Make sure your Serial Monitor has: Line Ending: CRLF (or at
-        // least LF due to this code.).
-        //
-        // Some terminals send \r, some \n and some both.
-        //
-        // If this byte is found we are at the end of our string.
-        if ( (tmp == '\r') || (tmp == '\n') ){
-            // Terminate string with string terminator as per C
-            // programming language spec.
-            *ptr = '\0';
-            //flag_read_done = 1;
-            return;
-        }
-        else{
-            // Otherwise save the character in the usart_buffer.
-            *ptr++ = tmp;
-        }
-
-        
-} // end: usart_read_string()
-
-
-
 void usart_send_byte(unsigned char data){
 
     // Send a byte  when the UDRE0(USART data register  empty flag) id
@@ -230,8 +208,9 @@ void usart_send_byte(unsigned char data){
 
 
 
-// chatgpt  says c++  compiler is  strictor than  c compiler,  so need
-// const.
+
+// check if const is really needed, cgpt says c++ compiler is strictor
+// than c compiler.
 void usart_send_string(const char *pstr){
     
     // note:  const means  a  read-only-string, prevents  accidentally
@@ -251,82 +230,32 @@ void usart_send_string(const char *pstr){
 
 
 
-void usart_send_num(float num, char num_int, char num_decimal){
-
-    // Send a number from MCU to PC by converting it to a string.
-
-    // dtostrf(num,  width, precision,  string) converts  float to  an
-    // ASCII string.  We add a string  terminator '\0' so the PC knows
-    // when we are at the end of a string).
-
-    
-    char str[20];
-    if (num_decimal == 0)
-        dtostrf(num, num_int, num_decimal, str);
-    else
-        dtostrf(num, (num_int+num_decimal+1), num_decimal, str);
-    str[num_int+num_decimal+1] = '\0';
-    usart_send_string(str);
-        
-}
-
-
 
 void print_led_status_fn_menu(void){
 
     // Output the  menu form the  MCU, of  LED status required,  to PC
     // serial monitor.
     
-    usart_send_string("\nEnter a number corresponding LED action you want.\n");
+    usart_send_string("\nEnter a number corresponding to the LED state you "
+                      "want:\n");
     usart_send_string("0. Turn LED off\n");
     usart_send_string("1. Turn LED on\n");
 }
 
 
 
-void process_user_input(int8_t user_choice){
-
-    // Numbers entered by user after user choosing a mathematical
-    // operation to perform on them.
-//    float first_number , second_number;
-
-    // Converted number after mathematical operation performed.  Kept
-    // as a float as usart_send_num(float num....) expects this.
-    //
-    // usart_send_num(float num, char num_total_chars, char num_decimal_places)
-     float number;
-
-    // uint8_t max_field_width_num = 10;
-    // uint8_t num_decimal_places = 6;
-
-    // Lets you see  where your input string parsing  stopped, in case
-    // of non-numeric number input.
-    //
-    // That is, if not NULL a  pointer to the character after the last
-    // character  used in  the conversion  in stored  in the  location
-    // referenced by it.
-    char *end_str_ptr;
-        
-
-    // usart_send_string("\nEnter state of LED required: ");
-    //usart_flush(); // Get junk out of MCU RX buffer
-    //usart_read_string(ptr_to_usart_buffer);
-    // number = strtod(ptr_to_usart_buffer, &end_str_ptr);
-    // if( (end_str_ptr == ptr_to_usart_buffer) || (*end_str_ptr !='\0') ){
-    //     // No conversion happened or you typed junk after number.
-    //     usart_send_string("Invalid input number. Try again\n");
-    //     return;
-    // }
-    
+void process_user_input(int8_t user_choice,  volatile uint8_t *port_output_led){
 
 
     switch (user_choice) {
         case 0: {
-            usart_send_string("Turn off LED");
+            usart_send_string("\nLED will be in the OFF state now.\n");
+            bitClear(*port_output_led, pin_led);
             break;
         }
         case 1: {
-            usart_send_string("Turn on LED");
+            usart_send_string("\nLED will be in the ON state now.\n");
+            bitSet(*port_output_led, pin_led);
             break;
         }
         default:
@@ -334,10 +263,7 @@ void process_user_input(int8_t user_choice){
             
     } // end: switch()
 
-//    usart_send_num(number, max_field_width_num, num_decimal_places);
-//    usart_send_byte('\n'); // CRLF or EOL
-    
-        
+    flag_rx_done = 0;
 
 } // end: process_user_input()
 
