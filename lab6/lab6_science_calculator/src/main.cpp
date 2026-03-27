@@ -420,11 +420,13 @@ void process_user_input(int8_t user_choice){
             usart_send_string("sin(x), where x is in degrees, is = ");
             radians = first_number * M_PI / 180.0;
             number = sin(radians);
+            break;
         }
         case 9:{
             usart_flush();
             usart_send_string("log base m of n, is = ");
             number = (log(second_number) / log(first_number));
+            break;
         }
         // case 10: {
         //     usart_send_string("ceil(x), round UP to the nearest integer, is = ");
