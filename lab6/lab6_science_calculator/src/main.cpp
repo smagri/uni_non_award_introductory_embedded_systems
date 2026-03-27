@@ -310,8 +310,11 @@ void print_math_fn_menu(void){
     usart_send_string("5. exp(x), e^x, e approx =2.71828, Euler's number.\n");
     usart_send_string("6. log(x), na1tural logarithm, what to raise e to, to get x\n");
     usart_send_string("7. log10(x), what do raise 10 to, to get x.\n");
-    usart_send_string("8. ceil(x), rounds UP to the nearest integer.\n");
-    usart_send_string("9. floor(x), rounds DOWN to the nearest integer\n");
+    usart_send_string("8. sin(x), where x is in degrees.\n");
+    usart_send_string("9. log base m of n.\n");
+    //usart_send_string("10. ceil(x), rounds UP to the nearest integer.\n");
+    //usart_send_string("11. floor(x), rounds DOWN to the nearest integer\n");
+
     
 }
 
@@ -320,7 +323,7 @@ void process_user_input(int8_t user_choice){
 
     // Numbers entered by user after user choosing a mathematical
     // operation to perform on them.
-    float first_number , second_number;
+    float first_number , second_number, radians;
 
     // Converted number after mathematical operation performed.  Kept
     // as a float as usart_send_num(float num....) expects this.
@@ -339,10 +342,10 @@ void process_user_input(int8_t user_choice){
     // referenced by it.
     char *end_str_ptr;
         
-
     usart_send_string("\nEnter first number: ");
     usart_flush(); // Get junk out of MCU RX buffer
     usart_read_string(ptr_to_usart_buffer);
+    //first_number = atof(ptr_to_usart_buffer);
     first_number = strtod(ptr_to_usart_buffer, &end_str_ptr);
     if( (end_str_ptr == ptr_to_usart_buffer) || (*end_str_ptr !='\0') ){
         // No conversion happened or you typed junk after number.
@@ -355,10 +358,11 @@ void process_user_input(int8_t user_choice){
     //usart_send_byte('\n');
     
 
-    if(user_choice == 3){
+    if( (user_choice==3) || (user_choice==9) ){
         usart_send_string("Enter second number: ");
         usart_flush();
         usart_read_string(ptr_to_usart_buffer);
+        //second_number = atof(ptr_to_usart_buffer);
         second_number = strtod(ptr_to_usart_buffer, &end_str_ptr);
         if( (end_str_ptr == ptr_to_usart_buffer) || (*end_str_ptr !='\0') ){
             // No conversion happened or you typed junk after number.
@@ -412,15 +416,25 @@ void process_user_input(int8_t user_choice){
             break;
         }
         case 8: {
-            usart_send_string("Ceiling, ceil(x), is = ");
-            number = ceil(first_number);
-            break;
+            usart_flush();
+            usart_send_string("sin(x), where x is in degrees, is = ");
+            radians = first_number * M_PI / 180.0;
+            number = sin(radians);
         }
-        case 9: {
-            usart_send_string("Floor value, floor(x), is = ");
-            number = floor(first_number);
-            break;
+        case 9:{
+            usart_flush();
+            usart_send_string("log base m of n, is = ");
+            number = (log(second_number) / log(first_number));
         }
+        // case 10: {
+        //     usart_send_string("ceil(x), round UP to the nearest integer, is = ");
+        //     number = ceil(first_number);
+        // }
+        // case 11: {
+        //     usart_send_string("floor(x), round DOWN to the nearest integer, is =");
+        //     number = floor(first_number);
+        //     break;
+        // }  
         default:
             break;
             

@@ -1,5 +1,6 @@
+#ifndef F_CPU 16000000UL
 #define F_CPU 16000000UL
-
+#endif /* F_CPU 16000000UL */
 
 
 //#include <Arduino.h> // for debugging only
@@ -51,16 +52,35 @@ char usart_buffer[BUFFER_SIZE] = {0};
 char *ptr_to_usart_buffer = usart_buffer;
 
 
+ISR(USART_RX_vect){
+
+
+    // This can't block???
+    // Do I initialise the interrupt RX here???
+    
+    // Blocks waiting for user input. Value stored in USART RX
+    // buffer.
+    usart_read_string(ptr_to_usart_buffer);
+}
+
+
+
+ISR(USART_RX_vect);
+
+
 
 int main( )
 {
-     usart_init(19200);
+    usart_init(19200); // Do I initialise the interrupt for RX here???
     _delay_ms(100);
 
     uint8_t user_choice;
-    
+
+    sei(); // Enable global interrupt
 
     while (1) {
+
+
         
         usart_flush(); // Clear out the RX register to prevent false reading.
         
@@ -150,6 +170,8 @@ void usart_flush(void){
 
 void usart_read_string(char *ptr){
 
+    // The ISR USART_RX_vect has been called.  No blocking allowed.
+
     // UDR0 is the  TX/RX data I/O register of the  arduino.  When the
     // flag RXC0  is set in  the UCR0A(Control and Status  Register A)
     // data is ready  to be read from the RX  buffer(UDR0).  When RXC0
@@ -160,11 +182,12 @@ void usart_read_string(char *ptr){
     // Continue  reading bytes/characters  from the  RX buffer  of the
     // arduino MCU till EOL is found.   The data comes from the serial
     // monitor on my PC as ASCII characters.
-    while (1) {
 
-        // Block/wait till the user sends something.  Kai's code
-        while (!bitCheck(UCSR0A, RXC0))
-            ;            
+    // Wait till the user sends something.
+    if (!bitCheck(UCSR0A, RXC0))
+        return;
+    
+    
 
         tmp = UDR0; // TX/RX I/O register, or data buffer.
 
@@ -189,8 +212,6 @@ void usart_read_string(char *ptr){
             *ptr++ = tmp;
         }
 
-        
-    } // end: while(1)
         
 } // end: usart_read_string()
 
