@@ -49,46 +49,50 @@ void process_user_input(int8_t user_choice,  volatile uint8_t *port_output_led);
 // all elements of usart_buffer is assgined to 0
 char usart_buffer[BUFFER_SIZE] = {0};
 char *ptr_to_usart_buffer = usart_buffer;
-volatile bool flag_rx_done = 0;
+
+// Set to volatile as can be changed in the ISR.  Indicates the RX
+// xfer of string from PC to MCU is complete or not.
+volatile bool flag_rx_done = 0; // Initialised to not complete.
 
 
 
 ISR(USART_RX_vect){
 
     // We have recived the interrupt indicating the RX buffer contains
-    // data.  However, first  we need to enable the  interrupt for the
-    // RXCIE0 in UCSR0B.
+    // data.  Remember first we need  to enable the interrupt for, data
+    // in RX buffer, with the RXCIE0 flag in UCSR0B.
     
     char tmp = UDR0;
 
     //usart_send_string("\ndbg: USART_RX_vect(): in ISR\n");
 
     if (flag_rx_done == 0){
-
         // If we  have reached the end  of string sent from  the PC to
         // the MCU. Terminate the string as per C standard.  Otherwise
         // put the UDRO RX data into our usart_buffer.
         if ( (tmp == '\r') || (tmp == '\n') ){
             *ptr_to_usart_buffer = '\0';
-            flag_rx_done = 1;
+            flag_rx_done = 1; // xfer from PC to MCU complete
         }
         else{
             *ptr_to_usart_buffer++ = tmp;
         }
-        
     }
+    
 }
 
 
 
 int main( )
 {
-    usart_init(19200); // Do I initialise the interrupt for RX here???
+
+    usart_init(19200);
     _delay_ms(100);
 
-    uint8_t user_choice;
+    sei(); // Enable global interrupts, must be set before any ISR can execute.
 
-    sei(); // Enable global interrupts
+    uint8_t user_choice; // User choice, toggles LED status on or off.
+
 
     // Setup the arduino output pin for the LED.
     volatile uint8_t *ddr_led = &DDRB;
@@ -103,7 +107,9 @@ int main( )
     while (1) {
 
         if (flag_rx_done){
-
+            // Xfer from  PC to MCU is  complete and via ISR.   We can
+            // now process that data.
+            
             // Check if it's  exactly one digit 1–9 by  checking the ASCII
             // numbers.  Also,  reject non single character  entries, such
             // decimals and outside range ascii characters.
@@ -112,9 +118,11 @@ int main( )
                  || (usart_buffer[1]!='\0') ){
                 usart_send_string("Invalid selection. Try again\n");
 
-                // Get the next byte from the RX buffer.
-                ptr_to_usart_buffer = usart_buffer;
+                // Ignore this  byte and get  ready for the  next byte
+                // from the RX buffer.
+                ptr_to_usart_buffer = &usart_buffer[0];
                 flag_rx_done = 0;
+                usart_flush();
                 
                 print_led_status_fn_menu();
                 
@@ -127,6 +135,8 @@ int main( )
                 user_choice = atoi(usart_buffer);
             }
 
+            // Turn LED on or off depending on user input to the PC
+            // serial monitor.
             process_user_input(user_choice, port_output_led);
 
 
@@ -135,9 +145,12 @@ int main( )
             flag_rx_done = 0;
 
             print_led_status_fn_menu();
-            
-            //usart_flush();
-        }
+
+        } // end: if(flag_rx_done)
+
+        // Can do  any other  processing while waiting  for the  PC to
+        // populate the MCU RX buffer.
+        
 
     } // end: while
         
@@ -148,8 +161,8 @@ int main( )
 
 void usart_init(float baud_rate){
 
-    // USE Claude  Haiku 4.5 version of  this fn as it  makes settings
-    // more clear:
+
+    // Setting the baud rate register:
     //
     // Fosc, internal Crystal Arduino r3 = 16MHz
     // ubrr0 = (Fosc/prescale factor * baud rate) - 1
@@ -167,7 +180,7 @@ void usart_init(float baud_rate){
     // Set baud rate
     UBRR0 = ubrr0a;
     
-    // Enable transmitter and receiver and the Interrupt Service
+    // Enable transmitter and receiver, and the Interrupt Service
     // Routine on the RX buffer.
     UCSR0B = (1 << TXEN0) | (1 << RXEN0) | (1 << RXCIE0);
     
@@ -262,8 +275,6 @@ void process_user_input(int8_t user_choice,  volatile uint8_t *port_output_led){
             break;
             
     } // end: switch()
-
-    flag_rx_done = 0;
 
 } // end: process_user_input()
 
