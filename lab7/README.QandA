@@ -1,0 +1,72 @@
+Smart Lamp (2 points) -- Strictly no Arduino programming or functions
+
+Everything you need for undestanding and implementing below can be
+found in lecture slides and demo codes therein.
+
+Task1:
+(0.5 points) Determine the indicator range of your photocell using ADC
+and voltage divider circuit, see Page 82 of lecture-6 slides,
+requiring:
+
+* must use  a resistor with different  resistance from the one  in the
+  slide.
+
+* get a  similar screenshot  to that  in the  slide page  for marking,
+  preparing for below questions
+
+Q1: how would the indicator value change if we swap the photocell with
+fixed resistor.
+
+Q2: how  would the indicator value  change if we increase  or decrease
+fixed resistor's resistance in different brightness conditions
+
+
+
+Task2:
+(0.5  point)  Use  photocell's   reading  to  control  LED  brightness
+automatically, requiring:
+
+* LED is brighter/dimmer as embient brightness decreases/increases
+* must use macro definitinos for linear mapping input and output ranges
+* prepare for below questions 
+Q3: explain linear mapping between photocell measurements and LED 
+Q4: explain principles and methods of controlling LED brightness 
+
+
+
+Task3:
+(1 points) Add a software switch of the LED through USART transmission
+from PC terminal to the development board, requiring:
+
+sending  0 from  pc to  MCU turns  LED off;  sending 1  turns LED  on;
+sending any  other things does not  trigger any reaction from  MCU use
+interrupt for USART receiving in MCU;  refer to pages 39-41 in lecture
+6 slides and lecture recording for details
+
+
+Q5: must do steps of using interrupt
+
+Initialise  the   RXCIE0,  RX  Interrupt  Enable   and  enable  global
+interrupts.  Use a flag to track EOL status.
+
+
+Q6: how to stop MCU from reacting to receiptions other than 0 and 1
+
+See code near usart_send_string("Invalid selection. Try again\n");.
+
+
+Q7: is  number 0 and  1 received in  MCU directly? penalty  applies to
+this one if answer is wrong.
+
+No the  MCU recives  ascii characters  for 0  then \r  or \n  OR ascii
+character for 1 then \r or \n.
+
+
+Q8:  if no  to Q7,  then how  to get  the number  0 and  1 from  USART
+receiption  in MCU.   when  turning  on LED  after  off through  USART
+control, brightness  does not  change explain mechanism  for achieving
+this.
+
+We are just  providing approximatly 5V or OV to  the output pin(PB0 in
+this case).   We would need  a PWM signal  with varing duty  cycles to
+change the brightness of the LED.
