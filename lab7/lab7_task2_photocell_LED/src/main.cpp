@@ -36,9 +36,10 @@
 
 // Define feasible ranges for linear mapping:
 #define ADC_MIN 86 // minimum feasible ADC count for photocell
+#define ADC_AMBIENT_MAX 200
 #define ADC_MAX 935 // maximum feasible ADC count for photocell
 #define TIME_ON_MIN 0 // maximum feasible LED time on, ms.
-#define TIME_ON_MAX 500 // maximum feasible LED time on, ms.
+#define PWM_PERIOD_MS 10 // maximum feasible LED time on, ms.
 
 // LED pin connection on atmega328p.
 #define pin_led PB1
@@ -62,9 +63,8 @@ void usart_read_string(char *ptr_to_str);
 void usart_send_byte(unsigned char data);
 void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
-uint16_t linear_mapping(uint16_t adc_cur);
-
-
+uint32_t linear_mapping(uint16_t adc_cur);
+void delay_ms_runtime(uint16_t ms);
 
 
 ISR(ADC_vect){
@@ -110,28 +110,45 @@ int main(void)
         // signal mark time.
         bitSet(ADCSRA, ADSC);
 
-        // // Get ADC register value ready for plotting in vscode telepot:
+        // Get ADC register value ready for plotting in vscode telepot:
+        // usart_flush();
         // usart_send_string(">adc_cur:");
         // // ADC register value 4 places including decimal point as an integer.
         // usart_send_num(adc_cur, 4, 0);
         // // Telepot value terminating character.
         // usart_send_string("\n");
-
+        // _delay_ms(500);
+        
         // _delay_ms(100);
-        uint16_t time_on_cur = linear_mapping(adc_cur);
+        uint32_t time_on_cur = linear_mapping(adc_cur);
+        // usart_flush();
+        // usart_send_string("while loop: time_on_cur=");
+        // usart_send_num(time_on_cur, 6, 0);
+        // usart_send_byte('\n'); // CRLF or EOL
+        // // _delay_ms(500);
+        // if (time_on_cur > 0 && time_on_cur < 2)
+        //     time_on_cur = 2;
+        // if (time_on_cur > PWM_PERIOD_MS)
+        //     time_on_cur = PWM_PERIOD_MS;
 
 
         // Deliver  a PWM(Pulse  Width  Modulated) signal  to the  LED
         // proportional to the current adc value.
 
-        // Output signal mark.
+        // // Output signal mark.
         bitSet(*port_led, pin_led);
-        _delay_ms(time_on_cur);
+        delay_ms_runtime(time_on_cur);
 
-        // Output signal space.
-        uint16_t time_off = (TIME_ON_MAX - time_on_cur);
+        // // Output signal space.
+        uint32_t time_off = (PWM_PERIOD_MS - time_on_cur);
+        
+        // usart_flush();
+        // usart_send_string("while loop: time_off=");
+        // usart_send_num(time_off, 6, 0);
+        // usart_send_byte('\n'); // CRLF or EOL
+        // _delay_ms(500);
         bitClear(*port_led, pin_led);
-        _delay_ms(time_off);
+        delay_ms_runtime(time_off);
          
     }
     
@@ -141,11 +158,17 @@ int main(void)
 
 
 
-
-
-
 // User defined functions: /////////////////////////////////////////////////////
-uint16_t linear_mapping(uint16_t adc_cur){
+
+void delay_ms_runtime(uint16_t ms) {
+    for (uint16_t i = 0; i < ms; i++) {
+        _delay_ms(1); // This is a constant, so the compiler is happy
+    }
+}
+
+
+
+uint32_t linear_mapping(uint16_t adc_cur){
 
     // Linear mapping equation: slope = (y2 -y1)/(x2-x1)
     //
@@ -158,10 +181,10 @@ uint16_t linear_mapping(uint16_t adc_cur){
     // output range.
 
     // To  get  slower  delays  you  need to  increase  the  slope  by
-    // increasion TIME_ON_MAX.  So that you get bigger delays for more
+    // increasion PWM_PERIOD_MS.  So that you get bigger delays for more
     // quickly for the same range of ADC_MAX and ADC_MIN.
     
-    uint16_t time_on_cur;
+    uint32_t time_on_cur;
     
     // Clamp input so  it stays in sensor range.  If  you SWAP ADC_MIN
     // and ADC_MAX both  clamping statements are true  and adc_cur, is
@@ -175,7 +198,7 @@ uint16_t linear_mapping(uint16_t adc_cur){
     if (adc_cur > ADC_MAX)
         adc_cur = ADC_MAX;
 
-    // If  we SWAP  TIME_ON_MAX and  TIME_ON_MIN we  get a  -ve slope.
+    // If we  SWAP PWM_PERIOD_MS and  TIME_ON_MIN we get a  -ve slope.
     // Hence, we  get faster  beeping at  longer distances  and slower
     // beeping at shorter distances.  Thus for  a small x delay is big
     // and for a bigger x delay is smaller.  Draw a -ve sloap graph to
@@ -188,7 +211,13 @@ uint16_t linear_mapping(uint16_t adc_cur){
         
     time_on_cur = TIME_ON_MIN
         + (adc_cur - ADC_MIN)
-        * ((TIME_ON_MAX - TIME_ON_MIN)) / ((ADC_MAX - ADC_MIN));
+        * ((PWM_PERIOD_MS - TIME_ON_MIN)) / ((ADC_MAX - ADC_MIN));
+
+    // usart_flush();
+    // usart_send_string("linear_mapping: time_on_cur=");
+    // usart_send_num(time_on_cur, 10, 0);
+    // usart_send_byte('\n'); // CRLF or EOL
+    // _delay_ms(500);
     
     return time_on_cur;
 }
