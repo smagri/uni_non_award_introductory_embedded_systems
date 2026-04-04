@@ -212,7 +212,15 @@ uint32_t linear_mapping(uint16_t adc_cur){
     time_on_cur = TIME_ON_MIN
         + (adc_cur - ADC_MIN)
         * ((PWM_PERIOD_MS - TIME_ON_MIN)) / ((ADC_MAX - ADC_MIN));
+    
+    // time_on_cur = PWM_PERIOD_MS 
+    //     - (adc_cur - ADC_MIN) 
+    //     * (PWM_PERIOD_MS - TIME_ON_MIN) / (ADC_MAX - ADC_MIN);
 
+    // time_on_cur = PWM_PERIOD_MS 
+    //     - ((uint32_t)(adc_cur - ADC_MIN) * (PWM_PERIOD_MS - TIME_ON_MIN) / (ADC_MAX - ADC_MIN));
+
+    
     // usart_flush();
     // usart_send_string("linear_mapping: time_on_cur=");
     // usart_send_num(time_on_cur, 10, 0);
