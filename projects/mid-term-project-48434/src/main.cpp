@@ -41,7 +41,7 @@ typedef enum{
 
 
 State auto_traffic_lights(void);
-State traffic_light_sensor_system(void);
+State traffic_light_sonar_system(void);
 
 
 // Debugging USART functions
@@ -52,7 +52,8 @@ void usart_read_string(char *ptr_to_str);
 void usart_send_byte(unsigned char data);
 void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
-void print_usart_debugging_menu(void);
+void print_usart_debugging_mode_menu(void);
+void set_user_required_usart_debugging_mode(int8_t user_choice);
 
 
 // Global definitions, hence available to all functions.
@@ -65,12 +66,18 @@ void print_usart_debugging_menu(void);
 char usart_buffer[BUFFER_SIZE] = {0};
 char *ptr_to_usart_buffer = usart_buffer;
 
-// Flag for  respective main  state machine  modes to  print debugging
-// data as it is calculated.
-char usart_debugging_mode = 0; // System starts with no debugging modes active.
+// Flags for respective  main state machine modes  to print debugging,
+// or  not, data  as it  is calculated.   Input is  taken from  the PC
+// serial  monitor and  recived by  the MCU  via an  interrupt service
+// routine, hence this is a non-blocking uart RX buffer read.
+bool usart_debugging_mode_pedestrian_distance = 0;
+bool usart_debugging_mode_led_brightness = 0;
+bool usart_debugging_mode_1_and_2_values = 0;
 
-// ISR for RX data flag
-char flag_rx_done = 0;
+// Set to volatile as can be changed in the ISR.  Indicates the RX
+// xfer of string from PC to MCU is complete or not.
+volatile bool flag_rx_done = 0; // Initialised to not complete.
+
 
 
 ISR(USART_RX_vect){
@@ -103,9 +110,20 @@ ISR(USART_RX_vect){
 int main(void)
 {
 
+
+    // Initialise the USART.
+    usart_init(9600);
+    _delay_ms(100);
+
+    sei(); // Enable global interrupts.
+    
     
     State state_current;
     state_current = AUTO_MODE;
+
+    usart_flush();
+    print_usart_debugging_mode_menu();
+
 
     while (1) {
 
@@ -116,15 +134,7 @@ int main(void)
 
                 state_current = auto_traffic_lights();
                 
-                state_current = traffic_light_sensor_system();
-
-
-                if (usart_debugging_mode){
-
-                    // Print out Distance_mm,  the current distance to
-                    // the pedestrian.
-                    
-                }
+                state_current = traffic_light_sonar_system();
 
 
                 // if (condition) {
@@ -163,7 +173,29 @@ int main(void)
 ///////////////////////////////////////////////////////////////////////////////
 
 
-State traffic_light_sensor_system(void){
+State traffic_light_sonar_system(void){
+
+
+    if (usart_debugging_mode_pedestrian_distance){
+
+        // Print  out   Distance_mm,  the  current  distance   to  the
+        // pedestrian via vscode Teleplot.  Values sent to Teleplot in
+        // format it expects.
+
+        float sonar_distance_mm;
+        for (int i=0; i<10; i++){
+            sonar_distance_mm = i;
+            usart_send_string(">sonar_distance_mm:");
+            // Send output to Teleplot
+            usart_send_num(sonar_distance_mm, 5, 6);
+            // Telepot value terminating character.
+            usart_send_string("\n");
+
+            _delay_ms(100);
+
+        }
+    }
+
 
     return AUTO_MODE;
 }
@@ -172,52 +204,86 @@ State traffic_light_sensor_system(void){
 
 
 State auto_traffic_lights(void){
+
     
+    if (usart_debugging_mode_led_brightness){
+
+        // Print out current ambient brightness
+        float led_light_level;
+
+        // Debugging
+        for (int i=0; i<10; i++){
+            led_light_level = i;
+            usart_send_string(">led_light_level(%):");
+            // Send output to Teleplot
+            usart_send_num(led_light_level, 4, 0);
+            // Telepot value terminating character.
+            usart_send_string("\n");
+            
+            _delay_ms(100);
+        }
+
+         
+    }
+
     return AUTO_MODE;
 }
 
 
 
 
-// Debugging USART functions
+// Debugging USART functions //////////////////////////////////////////////////
 void usart_debugging(void){
 
-    print_usart_debugging_mode_menu();
-
+    // Sets mode of debugging according to request from user PC serial
+    // monitor.  Option for no debugging  also exists.  It can also be
+    // used with vscode Teleplot.
+    //
+    // PC byte to MCU input reading  is into the USART RX register and
+    // is non-blocking as it is under USART_RX ISR control.
+    
+    uint8_t user_choice; // User choice for debugging mode.
+    
+    // Nothing to do if we haven't recived an input from the PC serial
+    // monitor yet, via the USART_RX interrupt service routine.
     if (!flag_rx_done)
         return;
 
-    if (flag_rx_done){
-        // Xfer from  PC to MCU is  complete and via ISR.   We can
-        // now process that data.
+    // Xfer from  PC to MCU is  complete and via ISR.   We can
+    // now process that data.
         
-        // Check if it's  exactly one digit 1–3 by  checking the ASCII
-        // numbers.  Also,  reject non single character  entries, such
-        // decimals and outside range ascii characters.
-        if ( (usart_buffer[0]<'0')
-             || (usart_buffer[0]>'3')
-             || (usart_buffer[1]!='\0') ){
-            usart_send_string("Invalid selection. Try again\n");
+    // Check if it's  exactly one digit 1–3 by  checking the ASCII
+    // numbers.  Also,  reject non single character  entries, such
+    // decimals and outside range ascii characters.
+    if ( (usart_buffer[0]<'0')
+         || (usart_buffer[0]>'3')
+         || (usart_buffer[1]!='\0') ){
+        usart_send_string("Invalid selection. Try again\n");
 
-            // Ignore this  byte and get  ready for the  next byte
-            // from the RX buffer.
-            ptr_to_usart_buffer = &usart_buffer[0];
-            flag_rx_done = 0;
-            usart_flush();
-        }
-        else{
-            // Convert input string into an integer.
-            //
-            // note: atoi() expects a null - terminated string.
-            user_choice = atoi(usart_buffer);
-            // usart_send_string("dbg: main(): User_choice is: ");
-            // usart_send_num(user_choice, 1, 0);
-            // usart_send_byte('\n'); // send EOL, CRLF
-        }
-
-
-    } // end: if(flag_rx_done)
+        // Ignore this  byte and get  ready for the  next byte
+        // from the RX buffer.
+    }
+    else{
+        // Convert input string into an integer.
+        //
+        // note: atoi() expects a null - terminated string.
+        user_choice = atoi(usart_buffer);
+        // usart_send_string("dbg: main(): User_choice is: ");
+        // usart_send_num(user_choice, 1, 0);
+        // usart_send_byte('\n'); // send EOL, CRLF
+        // Set debugging mode flags.
+        set_user_required_usart_debugging_mode(user_choice);
+    }
+    
         
+    // Get the next byte from the RX buffer.
+    ptr_to_usart_buffer = usart_buffer;
+    flag_rx_done = 0;
+    usart_flush();
+        
+    print_usart_debugging_mode_menu();
+
+    return;
 }
 
 
@@ -225,9 +291,8 @@ void usart_debugging(void){
 void print_usart_debugging_mode_menu(void){
 
     // Output the menu for debugging operations.
-    
-    usart_send_string("\nEnter a number corresponding to the usart debugging");
-    usart_send_string(" mode required:\n");
+    usart_send_byte('\n');
+    usart_send_string("\nEnter a number for usart debugging required:\n");
     usart_send_string("0. Switch off debugging mode, no data from MCU to PC.\n");
     usart_send_string("1. Send pedestrian distance measurments to PC.\n");
     usart_send_string("2. Send ambient brightness measurments to PC.\n");
@@ -236,39 +301,43 @@ void print_usart_debugging_mode_menu(void){
 }
 
 
-void process_user_usart_debugging_mode_input(int8_t user_choice){
+void set_user_required_usart_debugging_mode(int8_t user_choice){
 
+    // Set program state for debugging operations.
 
     switch (user_choice) {
         case 0: {
             usart_send_string("\nDebugging mode has been turned off.\n");
-            usart_debugging_mode = 0;
+            usart_debugging_mode_pedestrian_distance = 0;
+            usart_debugging_mode_led_brightness = 0;
             break;
         }
         case 1: {
             usart_send_string("\nSending pedestrian distance measurments");
             usart_send_string(" to PC via Teleplot\n");
-            usart_debugging_mode_pedestrian_distance_values = 1;
+            usart_debugging_mode_pedestrian_distance = 1;
+            usart_debugging_mode_led_brightness = 0;
             break;
         }
         case 2: {
             usart_send_string("\nSending ambient brightness measurements");
             usart_send_string(" to PC via Teleplot\n");
-            usart_debugging_mode_ambient_brightness_values = 1;
+            usart_debugging_mode_led_brightness = 1;
+            usart_debugging_mode_pedestrian_distance = 0;
             break;
         }
         case 3: {
-            usart_send_string("\nSending both data measurements in mode 1 and 2");
+            usart_send_string("\nSending both data measurements from mode 1 and 2");
             usart_send_string(" to PC via Teleplot\n");
-            usart_debugging_mode_1_and_2_values = 1;
+            usart_debugging_mode_pedestrian_distance = 1;
+            usart_debugging_mode_led_brightness = 1;
             break;
         }
         default:
             break;
-            
-    } // end: switch()
+    }
 
-} // end: process_user_input()
+}
 
 
 
@@ -354,6 +423,26 @@ void usart_send_string(const char *pstr){
     }
 }
 
+
+
+void usart_send_num(float num, char num_int, char num_decimal){
+
+    // Send a number from MCU to PC by converting it to a string.
+
+    // dtostrf(num,  width, precision,  string) converts  float to  an
+    // ASCII string.  We add a string  terminator '\0' so the PC knows
+    // when we are at the end of a string).
+
+    
+    char str[20];
+    if (num_decimal == 0)
+        dtostrf(num, num_int, num_decimal, str);
+    else
+        dtostrf(num, (num_int+num_decimal+1), num_decimal, str);
+    str[num_int+num_decimal+1] = '\0';
+    usart_send_string(str);
+        
+}
 
 
 
