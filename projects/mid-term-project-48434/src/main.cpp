@@ -342,9 +342,19 @@ State traffic_light_sonar_system(void){
     // When  the switch  is toggled  our program  runs or  stops after
     // debounceing the  switch.  We start off  with the system/circuit
     // off.
-    bool system_on_off_toggle = false;
+    static bool system_on_off_toggle = false;
 
+    
+    // Debounce the switch.
+    debounce_switch(ddr_switch, port_switch, port_switch_inputs,
+                    ddr_sonar, port_sonar, &system_on_off_toggle);
 
+    // If system/circuit is off skip everything.
+    if (!system_on_off_toggle){
+        //continue;
+        return AUTO_MODE;
+    }
+        
     echo_high_us_count = 0;
     timeout_counter = 30000;
         
@@ -364,7 +374,24 @@ State traffic_light_sonar_system(void){
         // to exit the wait/while loop.
         ;
 
+    // When  the  echo pin  has  gone  high  we can  start  timing
+    // time_echo_signal_is_high in  us.  If  we don't  receive and
+    // echo within the timout period in us we stop timing.
+    //
+    // We  are  waiting  for  the  echo   pin  going  high  as  it  is
+    // proportional to the distance the ultrasonic sensor measures.
+    //
+    //
+    // We read the echo signal from  the pin_echo input pin of the
+    // PINB input register.
+    while (bitCheck(*port_sonar_inputs, pin_echo) && timeout_counter--){
+        echo_high_us_count++;
+        _delay_us(1);
+    }
+    // Ensure echo pulse has completely finished.
+    while(bitCheck(*port_sonar_inputs, pin_echo));
 
+        
     // Note: Velocity  = Distance/Time,  so,
     // D = (time_echo_signal_is_high * velocity_of_sound/2).
     // Where D is the distance_to_the_obstacle in m.
@@ -401,7 +428,7 @@ State traffic_light_sonar_system(void){
         // format it expects.
 
         for (int i=0; i<10; i++){
-            sonar_distance_mm = i;
+            Dmm = i;
             usart_send_string(">sonar_distance_mm:");
             // Send output to Teleplot
             usart_send_num(Dmm, 5, 6);
@@ -413,7 +440,12 @@ State traffic_light_sonar_system(void){
         }
     }
 
-
+    
+    // Linearly map  the distance, from  the ultrasonic sensor  to the
+    // object, against the buzzer delay.  
+    float delay = linear_mapping(Dmm, Dmin, Dmax,
+                                 buzzer_delay_min, buzzer_delay_max);
+ 
     // Play the buzzer at the  frequency, duty cycle and total playing
     // time required in us.  The buzzer playing is proportional to the
     // distance the object is from the ultrasonic sensor.
@@ -543,6 +575,72 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
 
     return delay;
 }
+
+
+
+// Button/switch pin debouncing.  We execute  a delay of ms(amount has
+// to be determined emperically because  every button is different) on
+// the transition of  the button form high-low and  low-high to factor
+// in the the noise/ringing on the signal at the transitions.
+
+void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch,
+                     volatile uint8_t *port_switch_inputs,
+                     volatile uint8_t *ddr_sonar, volatile uint8_t *port_sonar,
+                     bool *system_on_off_toggle){
+
+    // Must be persistant between calls in main()'s while loop.
+    static bool switch_status_old = 1;
+    bool switch_status;
+    
+    
+    // What  value is  where  we  have the  button  connected.  It  is
+    // intially high.  Wait for the transition from high-low to toggle
+    // switch, changing its state from its previous state.
+    switch_status = bitRead(*port_switch_inputs, pin_switch);
+
+    // Keep reading  switch_status with  the previous command  till it
+    // transitions from high-low or low-high.  That is when the switch
+    // is pressed or released.
+    if(switch_status != switch_status_old){
+
+        // Button has transitioned from high-low or low-high.
+
+        // Wait a while due to ringing signal on transition
+        // high-low or low-high.
+            
+        // You need to tune this delay  based on the unique button you
+        // have.  Mechanical switches roughly bounce for
+        // 5-20ms.
+        // not enough for my switch as occasionally i don't get a toggle
+        //_delay_ms(10);
+        _delay_ms(50);
+        switch_status = bitRead(*port_switch_inputs, pin_switch);
+
+
+        // If now after the wait for switch bouncing to stop on
+        // the transition and the pin has really changed state.
+        if (switch_status != switch_status_old){
+            //Serial.println("dbg: debounce_switch()): Transition detected");
+            switch_status_old = switch_status;
+
+            
+            // We only  toggle on the press  edge, high-low tansition.
+            // Not on both edges high-low and low-high.
+            if(switch_status == 0){
+                //Serial.println("dbg: debounce_switch(): Button pressed");
+                // toggle the state of the led
+                bitInverse(*port_sonar, led_onboard);
+
+                // toggle system state/circuit on or off.
+                *system_on_off_toggle = !(*system_on_off_toggle);
+                // Serial.println(*system_on_off_toggle);
+                return;
+            }
+        }
+
+    } // end: if(switch_status != switch_status_old){
+       
+} // end: debounce_switch()
 
 
 
