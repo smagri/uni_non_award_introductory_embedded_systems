@@ -41,7 +41,14 @@ typedef enum{
 
 // State Machine modes functions.
 State auto_traffic_lights(void);
-State traffic_light_sonar_system(void);
+State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
+                                 volatile uint8_t *port_switch,
+                                 volatile uint8_t *port_switch_inputs,
+                                 volatile uint8_t *ddr_sonar,
+                                 volatile uint8_t *port_sonar,
+                                 volatile uint8_t *port_sonar_inputs,
+                                 volatile uint8_t *ddr_buzzer,
+                                 volatile uint8_t *port_buzzer);
 
 // Sonar/Pedestrian functions
 void playSound(float frequency, float duty_cycle, unsigned long playtime_us,
@@ -81,6 +88,13 @@ void set_user_required_usart_debugging_mode(int8_t user_choice);
 // circuit is in.  Decided against it as not in spec and it uses port
 // B which I'm already using for the sonar
 #define led_onboard PB5
+
+// Setup pins  for auto mode leds.   Other portB pins are  assigned to
+// the sonar/ultrasonic sensor.
+#define pin_led_red PB2
+#define pin_led_green PB3
+#define pin_led_yellow PB4
+
 
 // Our program buffer  that stores TX/RX data for the  Arduino that we
 // want to transmit from MCU->PC or recive data from the PC->MCU.
@@ -132,7 +146,66 @@ ISR(USART_RX_vect){
 
 int main(void)
 {
+    // Assign addresses of atmege328p ports to pointer address so that
+    // if the ports change(we choose to use different ports) the only
+    // change to our code in these 3 lines, not having to change every
+    // DDRB, PORTB... ports references in our code.
+    
+    // Use atmega328p ports to interface to the ultrasonic sensor.
 
+    // Volatile  type makes  sure that  the compiler  doesn't optimise
+    // away the contents of the register.  It must always be read from
+    // memory as  some bit  of hardware  may change  it, not  only our
+    // program can change it.
+
+    // Interface of atmega328p ports to ultrasonic sensor.
+    volatile uint8_t *ddr_sonar = &DDRB; // Use Data Direction Register B.
+    volatile uint8_t *port_sonar = &PORTB; // Use port B register.
+
+    // Input register(reads actual pin voltage)
+    volatile uint8_t *port_sonar_inputs = &PINB;
+    
+    // Interface of atmega328p ports to the passive buzzer.
+    volatile uint8_t *ddr_buzzer = &DDRC; 
+    volatile uint8_t *port_buzzer = &PORTC;
+
+    // Interface of atmega328p ports to toggle on and off switch.
+    volatile uint8_t *ddr_switch = &DDRD; 
+    volatile uint8_t *port_switch = &PORTD;
+    volatile uint8_t *port_switch_inputs = &PIND;
+
+
+    // Interface the the passive buzzer to arduino output port.
+    bitSet(*ddr_buzzer, pin_passive_buzzer);
+
+    // Set pin  PB0, that is pin  0 of port  B to an output  port.  It
+    // will generate  the trigger  signal required for  the ultrasonic
+    // sensor to start measuring distances to objects.
+    bitSet(*ddr_sonar, pin_trigger);
+
+    // Set pin PB1, that is pin 1 of port B to an input port.  It will
+    // receive the echo  signal from the ultrasonic  sensor.  The echo
+    // signal is the  signal returned when the trigger  signal hits an
+    // obstacle.
+    bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
+    bitSet(*port_sonar, pin_echo); // enable the pull up
+
+    // Configure pin as an input.  Then set it high as that enables
+    // its pullup resistor on the arduino pin.
+    bitClear(*ddr_switch, pin_switch);
+    bitSet(*port_switch, pin_switch);
+
+    // Configure pin 5 on port B, connected to the onboard LED, on the
+    // arduino uno r3, as an output port.
+    bitSet(*ddr_sonar, led_onboard);
+
+
+    // Setup traffic light LEDs in portB
+    bitSet(*ddr_sonar, pin_led_red);
+    bitSet(*ddr_sonar, pin_led_green);
+    bitSet(*ddr_sonar, pin_led_yellow);
+
+    
 
     // Initialise the USART.
     usart_init(9600);
@@ -155,9 +228,16 @@ int main(void)
         switch (state_current) {
             case AUTO_MODE: {
 
-                state_current = auto_traffic_lights();
+                //state_current = auto_traffic_lights();
                 
-                state_current = traffic_light_sonar_system();
+                state_current = traffic_light_sonar_system(ddr_switch,
+                                                           port_switch,
+                                                           port_switch_inputs,
+                                                           ddr_sonar,
+                                                           port_sonar,
+                                                           port_sonar_inputs,
+                                                           ddr_buzzer,
+                                                           port_buzzer);
 
 
                 // if (condition) {
@@ -196,35 +276,43 @@ int main(void)
 ///////////////////////////////////////////////////////////////////////////////
 
 
-State traffic_light_sonar_system(void){
+State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
+                                 volatile uint8_t *port_switch,
+                                 volatile uint8_t *port_switch_inputs,
+                                 volatile uint8_t *ddr_sonar,
+                                 volatile uint8_t *port_sonar,
+                                 volatile uint8_t *port_sonar_inputs,
+                                 volatile uint8_t *ddr_buzzer,
+                                 volatile uint8_t *port_buzzer){
 
-    // Assign addresses of atmege328p ports to pointer address so that
-    // if the ports change(we choose to use different ports) the only
-    // change to our code in these 3 lines, not having to change every
-    // DDRB, PORTB... ports references in our code.
+
+    // // Assign addresses of atmege328p ports to pointer address so that
+    // // if the ports change(we choose to use different ports) the only
+    // // change to our code in these 3 lines, not having to change every
+    // // DDRB, PORTB... ports references in our code.
     
-    // Use atmega328p ports to interface to the ultrasonic sensor.
+    // // Use atmega328p ports to interface to the ultrasonic sensor.
 
-    // Volatile  type makes  sure that  the compiler  doesn't optimise
-    // away the contents of the register.  It must always be read from
-    // memory as  some bit  of hardware  may change  it, not  only our
-    // program can change it.
+    // // Volatile  type makes  sure that  the compiler  doesn't optimise
+    // // away the contents of the register.  It must always be read from
+    // // memory as  some bit  of hardware  may change  it, not  only our
+    // // program can change it.
 
-    // Interface of atmega328p ports to ultrasonic sensor.
-    volatile uint8_t *ddr_sonar = &DDRB; // Use Data Direction Register B.
-    volatile uint8_t *port_sonar = &PORTB; // Use port B register.
+    // // Interface of atmega328p ports to ultrasonic sensor.
+    // volatile uint8_t *ddr_sonar = &DDRB; // Use Data Direction Register B.
+    // volatile uint8_t *port_sonar = &PORTB; // Use port B register.
 
-    // Input register(reads actual pin voltage)
-    volatile uint8_t *port_sonar_inputs = &PINB;
+    // // Input register(reads actual pin voltage)
+    // volatile uint8_t *port_sonar_inputs = &PINB;
     
-    // Interface of atmega328p ports to the passive buzzer.
-    volatile uint8_t *ddr_buzzer = &DDRC; 
-    volatile uint8_t *port_buzzer = &PORTC;
+    // // Interface of atmega328p ports to the passive buzzer.
+    // volatile uint8_t *ddr_buzzer = &DDRC; 
+    // volatile uint8_t *port_buzzer = &PORTC;
 
-    // Interface of atmega328p ports to toggle on and off switch.
-    volatile uint8_t *ddr_switch = &DDRD; 
-    volatile uint8_t *port_switch = &PORTD;
-    volatile uint8_t *port_switch_inputs = &PIND;
+    // // Interface of atmega328p ports to toggle on and off switch.
+    // volatile uint8_t *ddr_switch = &DDRD; 
+    // volatile uint8_t *port_switch = &PORTD;
+    // volatile uint8_t *port_switch_inputs = &PIND;
 
 
     // Ultrasonic  sensor  we  are  using is  the  HR-SR04,  with  the
@@ -265,30 +353,30 @@ State traffic_light_sonar_system(void){
 
 
     
-    // Interface the the passive buzzer to arduino output port.
-    bitSet(*ddr_buzzer, pin_passive_buzzer);
+    // // Interface the the passive buzzer to arduino output port.
+    // bitSet(*ddr_buzzer, pin_passive_buzzer);
 
-    // Set pin  PB0, that is pin  0 of port  B to an output  port.  It
-    // will generate  the trigger  signal required for  the ultrasonic
-    // sensor to start measuring distances to objects.
-    bitSet(*ddr_sonar, pin_trigger);
+    // // Set pin  PB0, that is pin  0 of port  B to an output  port.  It
+    // // will generate  the trigger  signal required for  the ultrasonic
+    // // sensor to start measuring distances to objects.
+    // bitSet(*ddr_sonar, pin_trigger);
 
-    // Set pin PB1, that is pin 1 of port B to an input port.  It will
-    // receive the echo  signal from the ultrasonic  sensor.  The echo
-    // signal is the  signal returned when the trigger  signal hits an
-    // obstacle.
-    bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
-    bitSet(*port_sonar, pin_echo); // enable the pull up
+    // // Set pin PB1, that is pin 1 of port B to an input port.  It will
+    // // receive the echo  signal from the ultrasonic  sensor.  The echo
+    // // signal is the  signal returned when the trigger  signal hits an
+    // // obstacle.
+    // bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
+    // bitSet(*port_sonar, pin_echo); // enable the pull up
 
-    // Configure pin as an input.  Then set it high as that enables
-    // its pullup resistor on the arduino pin.
-    bitClear(*ddr_switch, pin_switch);
-    bitSet(*port_switch, pin_switch);
+    // // Configure pin as an input.  Then set it high as that enables
+    // // its pullup resistor on the arduino pin.
+    // bitClear(*ddr_switch, pin_switch);
+    // bitSet(*port_switch, pin_switch);
 
-    // Configure pin 5 on port B, connected to the onboard LED, on the
-    // arduino uno r3, as an output port.
-    bitSet(*ddr_sonar, led_onboard);
-    bitClear(*port_sonar, led_onboard); // Start with the LED off
+    // // Configure pin 5 on port B, connected to the onboard LED, on the
+    // // arduino uno r3, as an output port.
+    // bitSet(*ddr_sonar, led_onboard);
+    // bitClear(*port_sonar, led_onboard); // Start with the LED off
 
     
     // Maximum  sensor measurment  distance is  5m. v=d/t,thus t/echo_high_us_count
@@ -645,6 +733,32 @@ void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch
 
 
 State auto_traffic_lights(void){
+
+    // Set PB2,  PB3, PB4 as outputs.   Other portB pins are  used for
+    // the sonar/ultrasonic sensor and  are left unchanged.  Note that
+    // doing it  this way does not  let you change the  pinout for the
+    // leds later.
+    // DDRB |= 0x1C; 
+
+    // // LEDs on Left->Right continuously.
+    // for (uint8_t i = PB2; i <= PB4; i++)
+    // {
+    //     PORTB &= 0xE3;
+    //     PORTB |= (1 << i);
+    //     _delay_ms(1000); // 1 second between led changes
+    // }
+    DDRB |= (1 << PB2) | (1 << PB3) | (1 << PB4);
+    
+    for (uint8_t i = PB2; i <= PB4; i++)
+    {
+        // Clear only PB2, PB3, PB4 (leave others untouched)
+        PORTB &= ~((1 << PB2) | (1 << PB3) | (1 << PB4));
+
+        // Turn ON current LED
+        PORTB |= (1 << i);
+
+        _delay_ms(1000);
+    }
 
     
     if (usart_debugging_mode_led_brightness){
