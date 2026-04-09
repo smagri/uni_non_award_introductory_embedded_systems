@@ -36,12 +36,14 @@
 
 // Define feasible ranges for linear mapping:
 #define ADC_MIN 86 // minimum feasible ADC count for photocell
+//#define ADC_MIN 120 // minimum feasible ADC count for photocell
 #define ADC_AMBIENT_MAX 200
 #define ADC_MAX 935 // maximum feasible ADC count for photocell
+//#define ADC_MAX 800 // maximum feasible ADC count for photocell
 
 #define TIME_ON_MIN 0 // maximum feasible LED time on, ms.
-//#define PWM_PERIOD_MS 10 // maximum feasible LED time on, ms.
 #define PWM_PERIOD_MS 10 // maximum feasible LED time on, ms.
+//#define PWM_PERIOD_MS 100 // maximum feasible LED time on, ms.
 
 // LED pin connection on atmega328p.
 #define pin_led PB1
