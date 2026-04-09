@@ -40,7 +40,8 @@ typedef enum{
 
 
 // State Machine modes functions.
-State auto_traffic_lights(void);
+State auto_traffic_lights(volatile uint8_t *port_sonar);
+
 State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
                                  volatile uint8_t *port_switch,
                                  volatile uint8_t *port_switch_inputs,
@@ -200,11 +201,15 @@ int main(void)
     bitSet(*ddr_sonar, led_onboard);
 
 
-    // Setup traffic light LEDs in portB
+    // Setup traffic light LEDs in portB as outputs.
     bitSet(*ddr_sonar, pin_led_red);
     bitSet(*ddr_sonar, pin_led_green);
     bitSet(*ddr_sonar, pin_led_yellow);
-
+    // Start with LEDs off
+    bitClear(*port_sonar, pin_led_red);
+    bitClear(*port_sonar, pin_led_green);
+    bitClear(*port_sonar, pin_led_yellow);
+    
     
 
     // Initialise the USART.
@@ -228,8 +233,8 @@ int main(void)
         switch (state_current) {
             case AUTO_MODE: {
 
-                //state_current = auto_traffic_lights();
-                
+
+                // Activate the sonar/ultrasonic sensor continuously.
                 state_current = traffic_light_sonar_system(ddr_switch,
                                                            port_switch,
                                                            port_switch_inputs,
@@ -238,6 +243,9 @@ int main(void)
                                                            port_sonar_inputs,
                                                            ddr_buzzer,
                                                            port_buzzer);
+
+                                // Set leds on from left to right continuously.
+                state_current = auto_traffic_lights(port_sonar);
 
 
                 // if (condition) {
@@ -514,18 +522,12 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
         // Print  out   Distance_mm,  the  current  distance   to  the
         // pedestrian via vscode Teleplot.  Values sent to Teleplot in
         // format it expects.
-
-        for (int i=0; i<10; i++){
-            Dmm = i;
-            usart_send_string(">sonar_distance_mm:");
-            // Send output to Teleplot
-            usart_send_num(Dmm, 5, 6);
-            // Telepot value terminating character.
-            usart_send_string("\n");
-
-            _delay_ms(100);
-
-        }
+        
+        usart_send_string(">sonar_distance_mm:");
+        // Send output to Teleplot
+        usart_send_num(Dmm, 5, 6);
+        // Telepot value terminating character.
+        usart_send_string("\n");
     }
 
     
@@ -732,7 +734,8 @@ void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch
 
 
 
-State auto_traffic_lights(void){
+State auto_traffic_lights(volatile uint8_t *port_sonar){
+        
 
     // Set PB2,  PB3, PB4 as outputs.   Other portB pins are  used for
     // the sonar/ultrasonic sensor and  are left unchanged.  Note that
@@ -746,20 +749,81 @@ State auto_traffic_lights(void){
     //     PORTB &= 0xE3;
     //     PORTB |= (1 << i);
     //     _delay_ms(1000); // 1 second between led changes
-    // }
-    DDRB |= (1 << PB2) | (1 << PB3) | (1 << PB4);
+    // // }
+    // DDRB |= (1 << PB2) | (1 << PB3) | (1 << PB4);
     
-    for (uint8_t i = PB2; i <= PB4; i++)
-    {
-        // Clear only PB2, PB3, PB4 (leave others untouched)
-        PORTB &= ~((1 << PB2) | (1 << PB3) | (1 << PB4));
+    // for (uint8_t i = PB2; i <= PB4; i++)
+    // {
+    //     // Clear only PB2, PB3, PB4 (leave others untouched)
+    //     PORTB &= ~((1 << PB2) | (1 << PB3) | (1 << PB4));
 
-        // Turn ON current LED
-        PORTB |= (1 << i);
+    //     // Turn ON current LED
+    //     PORTB |= (1 << i);
 
-        _delay_ms(1000);
-    }
+    //     _delay_ms(1000);
+    // }
+    // for (uint8_t i = pin_led_red; i <= pin_led_yellow; i++)
+    // {
+    //     // Clear the leds.
+    //     *port_sonar &= ~((1 << pin_led_red) |
+    //                      (1 << pin_led_green) |
+    //                      (1 << pin_led_yellow));
 
+    //     // Set leds from left to right continuously.
+    //     *port_sonar |= (1 << i);
+
+    //     _delay_ms(1000);
+    // }
+
+    // for (uint8_t i = pin_led_red; i <= pin_led_yellow; i++)
+    // {
+    //     // Turn off only the traffic LEDs
+    //     bitClear(*port_sonar, pin_led_red);
+    //     bitClear(*port_sonar, pin_led_green);
+    //     bitClear(*port_sonar, pin_led_yellow);
+
+    //     // Turn on just the current LED
+    //     bitSet(*port_sonar, i);
+
+    //     _delay_ms(1000);
+    // }
+    
+    // Long delays  here doesn't allow the  sonar/ultrasonic system to
+    // work.      There    are     probably    enough     delays    in
+    // traffic_light_sensor_system() anyhow,  for the leds to  be seen
+    // as transitioning.
+    // static uint16_t loop_counts = 0;
+    static uint8_t current_led = pin_led_red;
+
+    // Use a counter or a timer. Since you are using _delay_ms, 
+    // a simple way is to only run this logic once every X cycles 
+    // or use an actual hardware timer.
+
+    // This controls the speed without blocking everthing.
+    // loop_counts++;
+
+    // if (loop_counts >= 10){
+    //     // If you MUST keep it simple, just process ONE led per call:
+    //     bitClear(*port_sonar, pin_led_red);
+    //     bitClear(*port_sonar, pin_led_green);
+    //     bitClear(*port_sonar, pin_led_yellow);
+    //     bitSet(*port_sonar, current_led);
+
+    //     current_led++;
+    //     if (current_led > pin_led_yellow)
+    //         current_led = pin_led_red;
+
+    //     loop_counts = 0;
+    // }
+    bitClear(*port_sonar, pin_led_red);
+    bitClear(*port_sonar, pin_led_green);
+    bitClear(*port_sonar, pin_led_yellow);
+    bitSet(*port_sonar, current_led);
+    
+    current_led++;
+    if (current_led > pin_led_yellow)
+        current_led = pin_led_red;
+    
     
     if (usart_debugging_mode_led_brightness){
 
@@ -774,12 +838,13 @@ State auto_traffic_lights(void){
             usart_send_num(led_light_level, 4, 0);
             // Telepot value terminating character.
             usart_send_string("\n");
-            
-            _delay_ms(100);
-        }
 
-         
+            // Delays not neccessary
+            // _delay_ms(100);
+            // _delay_us(1);
+        }
     }
+
 
     return AUTO_MODE;
 }
