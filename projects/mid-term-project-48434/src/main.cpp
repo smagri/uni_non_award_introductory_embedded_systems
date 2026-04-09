@@ -80,7 +80,7 @@ void set_user_required_usart_debugging_mode(int8_t user_choice);
 // and mouse click on the variable, eventually it leads you to this
 // definition. ie PB0->PORTB->0.
 #define pin_trigger PB0
-#define pin_echo PB1
+#define pin_echo PB4
 #define pin_passive_buzzer PC0
 // This is still a PWM port on the arduino, where PD0 and PD1 look
 // like Tx/Rx serial port comms.
@@ -92,9 +92,12 @@ void set_user_required_usart_debugging_mode(int8_t user_choice);
 
 // Setup pins  for auto mode leds.   Other portB pins are  assigned to
 // the sonar/ultrasonic sensor.
-#define pin_led_red PB2
-#define pin_led_green PB3
-#define pin_led_yellow PB4
+// #define pin_led_red PB2
+// #define pin_led_green PB3
+// #define pin_led_yellow PB4
+#define pin_led_red PB1
+#define pin_led_green PB2
+#define pin_led_yellow PB3
 
 
 // Our program buffer  that stores TX/RX data for the  Arduino that we
@@ -188,7 +191,7 @@ int main(void){
     // receive the echo  signal from the ultrasonic  sensor.  The echo
     // signal is the  signal returned when the trigger  signal hits an
     // obstacle.
-    bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
+    bitClear(*ddr_sonar, pin_echo);
     bitSet(*port_sonar, pin_echo); // enable the pull up
 
     // Configure pin as an input.  Then set it high as that enables
