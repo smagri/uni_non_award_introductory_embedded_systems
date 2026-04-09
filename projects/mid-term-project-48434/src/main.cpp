@@ -145,12 +145,12 @@ ISR(USART_RX_vect){
 
 
 
-int main(void)
-{
+int main(void){
+    
     // Assign addresses of atmege328p ports to pointer address so that
-    // if the ports change(we choose to use different ports) the only
-    // change to our code in these 3 lines, not having to change every
-    // DDRB, PORTB... ports references in our code.
+    // if the ports change(we choose  to use different ports) the only
+    // change to  our code in  these few  lines, not having  to change
+    // every DDRB, PORTB... ports references in our code.
     
     // Use atmega328p ports to interface to the ultrasonic sensor.
 
@@ -244,7 +244,7 @@ int main(void)
                                                            ddr_buzzer,
                                                            port_buzzer);
 
-                                // Set leds on from left to right continuously.
+                // Set leds on from left to right continuously.
                 state_current = auto_traffic_lights(port_sonar);
 
 
@@ -294,34 +294,6 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
                                  volatile uint8_t *port_buzzer){
 
 
-    // // Assign addresses of atmege328p ports to pointer address so that
-    // // if the ports change(we choose to use different ports) the only
-    // // change to our code in these 3 lines, not having to change every
-    // // DDRB, PORTB... ports references in our code.
-    
-    // // Use atmega328p ports to interface to the ultrasonic sensor.
-
-    // // Volatile  type makes  sure that  the compiler  doesn't optimise
-    // // away the contents of the register.  It must always be read from
-    // // memory as  some bit  of hardware  may change  it, not  only our
-    // // program can change it.
-
-    // // Interface of atmega328p ports to ultrasonic sensor.
-    // volatile uint8_t *ddr_sonar = &DDRB; // Use Data Direction Register B.
-    // volatile uint8_t *port_sonar = &PORTB; // Use port B register.
-
-    // // Input register(reads actual pin voltage)
-    // volatile uint8_t *port_sonar_inputs = &PINB;
-    
-    // // Interface of atmega328p ports to the passive buzzer.
-    // volatile uint8_t *ddr_buzzer = &DDRC; 
-    // volatile uint8_t *port_buzzer = &PORTC;
-
-    // // Interface of atmega328p ports to toggle on and off switch.
-    // volatile uint8_t *ddr_switch = &DDRD; 
-    // volatile uint8_t *port_switch = &PORTD;
-    // volatile uint8_t *port_switch_inputs = &PIND;
-
 
     // Ultrasonic  sensor  we  are  using is  the  HR-SR04,  with  the
     // following specification.
@@ -358,33 +330,6 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     //float buzzer_delay_max = 500; // maximum feasible buzzer delay, ms.
     float buzzer_delay_min = 500; // minimum feasible buzzer delay, ms.
     float buzzer_delay_max = 20; // maximum feasible buzzer delay, ms.
-
-
-    
-    // // Interface the the passive buzzer to arduino output port.
-    // bitSet(*ddr_buzzer, pin_passive_buzzer);
-
-    // // Set pin  PB0, that is pin  0 of port  B to an output  port.  It
-    // // will generate  the trigger  signal required for  the ultrasonic
-    // // sensor to start measuring distances to objects.
-    // bitSet(*ddr_sonar, pin_trigger);
-
-    // // Set pin PB1, that is pin 1 of port B to an input port.  It will
-    // // receive the echo  signal from the ultrasonic  sensor.  The echo
-    // // signal is the  signal returned when the trigger  signal hits an
-    // // obstacle.
-    // bitClear(*ddr_sonar, pin_echo); // Set PB1 as an input port.
-    // bitSet(*port_sonar, pin_echo); // enable the pull up
-
-    // // Configure pin as an input.  Then set it high as that enables
-    // // its pullup resistor on the arduino pin.
-    // bitClear(*ddr_switch, pin_switch);
-    // bitSet(*port_switch, pin_switch);
-
-    // // Configure pin 5 on port B, connected to the onboard LED, on the
-    // // arduino uno r3, as an output port.
-    // bitSet(*ddr_sonar, led_onboard);
-    // bitClear(*port_sonar, led_onboard); // Start with the LED off
 
     
     // Maximum  sensor measurment  distance is  5m. v=d/t,thus t/echo_high_us_count
@@ -735,86 +680,25 @@ void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch
 
 
 State auto_traffic_lights(volatile uint8_t *port_sonar){
-        
 
-    // Set PB2,  PB3, PB4 as outputs.   Other portB pins are  used for
-    // the sonar/ultrasonic sensor and  are left unchanged.  Note that
-    // doing it  this way does not  let you change the  pinout for the
-    // leds later.
-    // DDRB |= 0x1C; 
+    // Transitioning all the LEDs of the traffic light system.  Form
+    // Left->Right continuously.
 
-    // // LEDs on Left->Right continuously.
-    // for (uint8_t i = PB2; i <= PB4; i++)
-    // {
-    //     PORTB &= 0xE3;
-    //     PORTB |= (1 << i);
-    //     _delay_ms(1000); // 1 second between led changes
-    // // }
-    // DDRB |= (1 << PB2) | (1 << PB3) | (1 << PB4);
-    
-    // for (uint8_t i = PB2; i <= PB4; i++)
-    // {
-    //     // Clear only PB2, PB3, PB4 (leave others untouched)
-    //     PORTB &= ~((1 << PB2) | (1 << PB3) | (1 << PB4));
+    // Each  transition is  done  per invocation  as  doing all  three
+    // transtions  with  a delay  between  each  transition stops  the
+    // sonar/ultrasonic sensor from working.
 
-    //     // Turn ON current LED
-    //     PORTB |= (1 << i);
+    // // TODO: Currently  the transtioning of the LEDs  is coupled to
+    // the time it takes  traffic_light_sonar_system() to execute.  To
+    // fix  use a  hardware  timer  to call  this  routine  at a  time
+    // relitevly independently  from the traffic_light_sonar_system().
+    // Say every second, this should  probably be much more infrequent
+    // than   the  time   it  takes   traffic_light_sonar_system()  to
+    // complete.
 
-    //     _delay_ms(1000);
-    // }
-    // for (uint8_t i = pin_led_red; i <= pin_led_yellow; i++)
-    // {
-    //     // Clear the leds.
-    //     *port_sonar &= ~((1 << pin_led_red) |
-    //                      (1 << pin_led_green) |
-    //                      (1 << pin_led_yellow));
 
-    //     // Set leds from left to right continuously.
-    //     *port_sonar |= (1 << i);
-
-    //     _delay_ms(1000);
-    // }
-
-    // for (uint8_t i = pin_led_red; i <= pin_led_yellow; i++)
-    // {
-    //     // Turn off only the traffic LEDs
-    //     bitClear(*port_sonar, pin_led_red);
-    //     bitClear(*port_sonar, pin_led_green);
-    //     bitClear(*port_sonar, pin_led_yellow);
-
-    //     // Turn on just the current LED
-    //     bitSet(*port_sonar, i);
-
-    //     _delay_ms(1000);
-    // }
-    
-    // Long delays  here doesn't allow the  sonar/ultrasonic system to
-    // work.      There    are     probably    enough     delays    in
-    // traffic_light_sensor_system() anyhow,  for the leds to  be seen
-    // as transitioning.
-    // static uint16_t loop_counts = 0;
     static uint8_t current_led = pin_led_red;
 
-    // Use a counter or a timer. Since you are using _delay_ms, 
-    // a simple way is to only run this logic once every X cycles 
-    // or use an actual hardware timer.
-
-    // This controls the speed without blocking everthing.
-    // loop_counts++;
-
-    // if (loop_counts >= 10){
-    //     // If you MUST keep it simple, just process ONE led per call:
-    //     bitClear(*port_sonar, pin_led_red);
-    //     bitClear(*port_sonar, pin_led_green);
-    //     bitClear(*port_sonar, pin_led_yellow);
-    //     bitSet(*port_sonar, current_led);
-
-    //     current_led++;
-    //     if (current_led > pin_led_yellow)
-    //         current_led = pin_led_red;
-
-    //     loop_counts = 0;
-    // }
     bitClear(*port_sonar, pin_led_red);
     bitClear(*port_sonar, pin_led_green);
     bitClear(*port_sonar, pin_led_yellow);
@@ -823,7 +707,23 @@ State auto_traffic_lights(volatile uint8_t *port_sonar){
     current_led++;
     if (current_led > pin_led_yellow)
         current_led = pin_led_red;
+
+    // Long delays  here doesn't allow the  sonar/ultrasonic system to
+    // work.      There    are     probably    enough     delays    in
+    // traffic_light_sensor_system() anyhow,  for the leds to  be seen
+    // as  transitioning.  So  for loops  like this  with long  delays
+    // don't work.
     
+    // for (uint8_t i = pin_led_red; i <= pin_led_yellow; i++)
+    // {
+    //     *port_sonar &= ~((1 << pin_led_red) |
+    //                      (1 << pin_led_green) |
+    //                      (1 << pin_led_yellow));
+        
+    //     *port_sonar |= (1 << i);
+        
+    //     _delay_ms(1000);
+    // }
     
     if (usart_debugging_mode_led_brightness){
 
