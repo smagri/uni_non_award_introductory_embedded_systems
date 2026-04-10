@@ -84,6 +84,8 @@ float get_duty_cycle(void);
 #define ADC_MIN 43 // minimum feasible ADC count for photocell
 #define ADC_MAX 1015 // maximum feasible ADC count for photocell
 #define LED_CHANGE_COUNT 20
+#define DETECTION_DISTANCE_MM 150
+
 
 // PB0 equates to number 0 as seen on vscode when you press control
 // and mouse click on the variable, eventually it leads you to this
@@ -587,7 +589,18 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     //
     // When using playsound(...) we get a >=50ms pulse here anyhow
     // though so we don't need an extra delay here.
+    if (Dmm < DETECTION_DISTANCE_MM)
+    {
+        // Turn OFF all LEDs
+        OCR1A = 0;
+        OCR1B = 0;
+        OCR2A = 0;
 
+        // Turn ON RED LED only
+        OCR1A = 255;   // full brightness
+
+        return AUTO_MODE; // skip normal LED cycling
+    }
         
     return AUTO_MODE;
 }
@@ -779,6 +792,20 @@ State auto_traffic_lights(float cur_duty){
     // Each  transition is  done  per invocation  as  doing all  three
     // transtions  with  a delay  between  each  transition stops  the
     // sonar/ultrasonic sensor from working.
+
+    // Some  important  information  about photocell  and  voltage/ADC
+    // direction:
+
+    // Swapping resistors does not change the photocell.  That is, the
+    // more light on it will make  its resistance go down.  Less light
+    // with make its resistance go up.  However, swapping the phtocell
+    // and fixed  resistor in the voltage  divider(output currently on
+    // A1) will change the responce of the ADC on A1.  Current circuit
+    // ADC values and duty cycle  values go down with increasing light
+    // on the photocell.  Swap the photocell and fixed resistor in the
+    // voltage divider and you get the opposite effect, ADC values and
+    // duty cycle values go up with increasing light on the photocell.
+    
 
     // // TODO: Currently  the transtioning of the LEDs  is coupled to
     // the time it takes  traffic_light_sonar_system() to execute.  To
