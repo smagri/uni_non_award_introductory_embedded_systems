@@ -71,6 +71,7 @@ uint32_t linear_mapping(uint16_t adc_cur);
 void delay_ms_runtime(uint16_t ms);
 void pwm1a_init(void);
 void adc_init(void);
+float get_duty_cycle(void);
 
 ISR(ADC_vect){
         

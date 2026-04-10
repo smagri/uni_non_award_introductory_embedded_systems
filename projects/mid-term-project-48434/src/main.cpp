@@ -40,7 +40,7 @@ typedef enum{
 
 
 // State Machine modes functions.
-State auto_traffic_lights(volatile uint8_t *port_sonar);
+State auto_traffic_lights(float cur_duty);
 
 State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
                                  volatile uint8_t *port_switch,
@@ -71,10 +71,19 @@ void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
 void print_usart_debugging_mode_menu(void);
 void set_user_required_usart_debugging_mode(int8_t user_choice);
+void pwm_init_leds(void);
+void adc_init(void);
+float get_duty_cycle(void);
 
 
 // Global definitions, hence available to all functions.
 #define BUFFER_SIZE 50
+// Define feasible ranges for linear mapping of adc vs duty cycle;
+// #define ADC_MIN 86 // minimum feasible ADC count for photocell
+// #define ADC_MAX 935 // maximum feasible ADC count for photocell
+#define ADC_MIN 43 // minimum feasible ADC count for photocell
+#define ADC_MAX 1015 // maximum feasible ADC count for photocell
+#define LED_CHANGE_COUNT 20
 
 // PB0 equates to number 0 as seen on vscode when you press control
 // and mouse click on the variable, eventually it leads you to this
@@ -118,7 +127,7 @@ bool usart_debugging_mode_1_and_2_values = 0;
 // Set to volatile as can be changed in the ISR.  Indicates the RX
 // xfer of string from PC to MCU is complete or not.
 volatile bool flag_rx_done = 0; // Initialised to not complete.
-
+volatile uint16_t adc_cur = 0;
 
 
 ISR(USART_RX_vect){
@@ -144,6 +153,16 @@ ISR(USART_RX_vect){
         }
     }
     
+}
+
+
+
+ISR(ADC_vect){
+        
+    //usart_send_string("dbg: in ISR");
+    
+    // Triggers when interrupt conversion is complete.
+    adc_cur = ADC; // Read ADC data register.
 }
 
 
@@ -208,16 +227,22 @@ int main(void){
     bitSet(*ddr_sonar, pin_led_red);
     bitSet(*ddr_sonar, pin_led_green);
     bitSet(*ddr_sonar, pin_led_yellow);
+
+    // Not  needed as  when you  enable PWM  the timer  hardware takes
+    // control of the pin. And portB writes are ignored for those pins.
+    //
     // Start with LEDs off
-    bitClear(*port_sonar, pin_led_red);
-    bitClear(*port_sonar, pin_led_green);
-    bitClear(*port_sonar, pin_led_yellow);
+    // bitClear(*port_sonar, pin_led_red);
+    // bitClear(*port_sonar, pin_led_green);
+    // bitClear(*port_sonar, pin_led_yellow);
     
     
 
     // Initialise the USART.
     usart_init(9600);
     _delay_ms(100);
+    pwm_init_leds();
+    adc_init();
 
     sei(); // Enable global interrupts.
     
@@ -229,13 +254,29 @@ int main(void){
     print_usart_debugging_mode_menu();
 
 
+    // ADSC sets  the ADC to  start conversions.  Setting this  bit is
+    // the  "software trigger"  that  tells the  hardware to  actually
+    // begin the  electrical process  of sampling  the voltage  on the
+    // pin.   As soon  as  the conversion  is  finished, the  hardware
+    // automatically  clears  it  to  0.   This  is  known  as  single
+    // conversion mode  as the  conversion occurs  only once  for each
+    // time ADSC is set.
+    bitSet(ADCSRA, ADSC);
+    _delay_ms(10);
+
+    
     while (1) {
 
         usart_debugging();
+
+
+        // Read photocell ADC and determine duty cycle via linear
+        // mapping, that is, adc values vs duty cucle.
+        float cur_duty = get_duty_cycle();
+
         
         switch (state_current) {
             case AUTO_MODE: {
-
 
                 // Activate the sonar/ultrasonic sensor continuously.
                 state_current = traffic_light_sonar_system(ddr_switch,
@@ -248,7 +289,7 @@ int main(void){
                                                            port_buzzer);
 
                 // Set leds on from left to right continuously.
-                state_current = auto_traffic_lights(port_sonar);
+                state_current = auto_traffic_lights(cur_duty);
 
 
                 // if (condition) {
@@ -285,6 +326,27 @@ int main(void){
 ///////////////////////////////////////////////////////////////////////////////
 //                           User defined functions                          //
 ///////////////////////////////////////////////////////////////////////////////
+
+float get_duty_cycle(void){
+
+   
+    // Single conversion mode is active, so conversion only occurs
+    // once  everytime ADSC  is  set.  Get  the  current value  of
+    // signal mark time.
+    bitSet(ADCSRA, ADSC);
+
+
+    float duty = linear_mapping((float)adc_cur,
+                                (float)ADC_MIN,
+                                (float)ADC_MAX,
+                                0.0f, 255.0f);
+
+    if (duty < 0) duty = 0;
+    if (duty > 255) duty = 255;
+        
+    return duty;
+}
+
 
 
 State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
@@ -481,8 +543,8 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     
     // Linearly map  the distance, from  the ultrasonic sensor  to the
     // object, against the buzzer delay.  
-    float delay = linear_mapping(Dmm, Dmin, Dmax,
-                                 buzzer_delay_min, buzzer_delay_max);
+    uint32_t delay = linear_mapping(Dmm, Dmin, Dmax,
+                                    buzzer_delay_min, buzzer_delay_max);
  
     // Play the buzzer at the  frequency, duty cycle and total playing
     // time required in us.  The buzzer playing is proportional to the
@@ -508,6 +570,7 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
 
     for (uint16_t i = 0; i<delay; i++) {
         _delay_ms(1);
+        //_delay_us(1);
     }
 
 
@@ -616,6 +679,30 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
 
 
 
+
+//uint8_t linear_map_to_pwm(float x, float xmin, float xmax,
+//                           uint8_t pwm_min, uint8_t pwm_max)
+// {
+//     float y;
+
+//     if (x < xmin)
+//         x = xmin;
+
+//     if (x > xmax)
+//         x = xmax;
+
+//     y = pwm_min + (x - xmin) * (pwm_max - pwm_min) / (xmax - xmin);
+
+//     if (y < 0)
+//         y = 0;
+
+//     if (y > 255)
+//         y = 255;
+
+//     return (uint8_t)y;
+// }
+
+
 // Button/switch pin debouncing.  We execute  a delay of ms(amount has
 // to be determined emperically because  every button is different) on
 // the transition of  the button form high-low and  low-high to factor
@@ -682,7 +769,7 @@ void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch
 
 
 
-State auto_traffic_lights(volatile uint8_t *port_sonar){
+State auto_traffic_lights(float cur_duty){
 
     // Transitioning all the LEDs of the traffic light system.  Form
     // Left->Right continuously.
@@ -699,17 +786,63 @@ State auto_traffic_lights(volatile uint8_t *port_sonar){
     // than   the  time   it  takes   traffic_light_sonar_system()  to
     // complete.
 
-
+    // Remember that:
+    // pin_led_red PB1=1
+    // pin_led_green PB2=2
+    // pin_led_yellow PB3=3
+        
     static uint8_t current_led = pin_led_red;
 
-    bitClear(*port_sonar, pin_led_red);
-    bitClear(*port_sonar, pin_led_green);
-    bitClear(*port_sonar, pin_led_yellow);
-    bitSet(*port_sonar, current_led);
+    // Count how many times this function is called.
+    static uint16_t call_count = 0;
+
+    // Clamp duty to 8-bit PWM range
+    if (cur_duty < 0)
+        cur_duty = 0;
+    if (cur_duty > 255)
+        cur_duty = 255;
+
+
+    // Turn all LEDs off first:
+    OCR1A = 0;   // red (PB1 / OC1A)
+    OCR1B = 0;   // green (PB2 / OC1B)
+    OCR2A = 0;   // yellow(PB3 / OC2A)
+
+    // Turn on only the current LED using the current duty cycle
+    switch (current_led)
+    {
+        case pin_led_red:
+            OCR1A = (uint8_t)cur_duty;
+            break;
+
+        case pin_led_green:
+            OCR1B = (uint8_t)cur_duty;
+            break;
+
+        case pin_led_yellow:
+            OCR2A = (uint8_t)cur_duty;
+            break;
+
+        default:
+            current_led = pin_led_red;
+            OCR1A = (uint8_t)cur_duty;
+            break;
+    }
+
+    // Only change to the next LED after x calls
+    call_count++;
+    if (call_count >= LED_CHANGE_COUNT){
     
-    current_led++;
-    if (current_led > pin_led_yellow)
-        current_led = pin_led_red;
+        call_count = 0;
+
+        if (current_led == pin_led_red)
+            current_led = pin_led_green;
+        else if (current_led == pin_led_green)
+            current_led = pin_led_yellow;
+        else
+            current_led = pin_led_red;
+    }
+
 
     // Long delays  here doesn't allow the  sonar/ultrasonic system to
     // work.      There    are     probably    enough     delays    in
@@ -731,21 +864,28 @@ State auto_traffic_lights(volatile uint8_t *port_sonar){
     if (usart_debugging_mode_led_brightness){
 
         // Print out current ambient brightness
-        float led_light_level;
 
         // Debugging
-        for (int i=0; i<10; i++){
-            led_light_level = i;
-            usart_send_string(">led_light_level(%):");
-            // Send output to Teleplot
-            usart_send_num(led_light_level, 4, 0);
-            // Telepot value terminating character.
-            usart_send_string("\n");
+        // for (int i=0; i<10; i++){
+        //     led_light_level = i;
+        //     usart_send_string(">led_light_level(%):");
+        //     // Send output to Teleplot
+        //     usart_send_num(led_light_level, 4, 0);
+        //     // Telepot value terminating character.
+        //     usart_send_string("\n");
 
-            // Delays not neccessary
-            // _delay_ms(100);
-            // _delay_us(1);
-        }
+        //     // Delays not neccessary
+        //     // _delay_ms(100);
+        //     // _delay_us(1);
+        // }
+        usart_send_string(">adc:");
+        usart_send_num((float)adc_cur, 4, 0);
+        usart_send_string("\n");
+
+        usart_send_string(">duty:");
+        usart_send_num(cur_duty, 3, 0);
+        usart_send_string("\n");
+        //_delay_ms(100);
     }
 
 
@@ -861,6 +1001,254 @@ void set_user_required_usart_debugging_mode(int8_t user_choice){
     }
 
 }
+
+
+
+void adc_init(void)
+{
+    // ==================================================
+    // STEP 1: Select voltage reference and input channel
+    // ==================================================
+    //
+    // ADMUX = ADC Multiplexer Selection Register
+    //
+    // REFS1:0 → Reference Selection Bits
+    //   00 → AREF pin
+    //   01 → AVcc (5V on Arduino Uno)
+    //
+    // MUX3:0 → Input channel selection
+    //   0000 → ADC0 (A0)
+    //   0001 → ADC1 (A1)  <-- we want this
+    //
+    // Result:
+    // - Use AVcc (5V) as reference
+    // - Read from ADC1 (PC1 pin)
+    // ==================================================
+
+    ADMUX = 0;                // Clear all bits first (good practice)
+
+    bitSet(ADMUX, REFS0);     // REFS0 = 1 → Vref = AVcc (5V)
+
+    bitSet(ADMUX, MUX0);      // MUX0 = 1 → Select ADC1 (A1 / PC1)
+    // MUX3, MUX2, MUX1 remain 0
+
+
+    // ==================================================
+    // STEP 2: Disable digital input buffer on ADC pin
+    // ==================================================
+    //
+    // DIDR0 = Digital Input Disable Register
+    //
+    // ADC1D = 1 → Disable digital input buffer on ADC1 pin
+    //
+    // Why?
+    // - Reduces power consumption
+    // - Reduces electrical noise on the analog pin
+    // - Improves ADC accuracy
+    // ==================================================
+
+    bitSet(DIDR0, ADC1D);
+
+
+    // ==================================================
+    // STEP 3: Configure ADC control register
+    // ==================================================
+    //
+    // ADCSRA = ADC Control and Status Register A
+    //
+    // ADPS2:0 → Prescaler bits
+    //   111 → divide clock by 128
+    //
+    // ADC clock = 16 MHz / 128 = 125 kHz
+    //
+    // Why 125 kHz?
+    // - Recommended ADC operating range: 50–200 kHz
+    // - Gives stable and accurate readings
+    // ==================================================
+
+    ADCSRA = 0;   // Clear register first
+
+    bitSet(ADCSRA, ADPS2);
+    bitSet(ADCSRA, ADPS1);
+    bitSet(ADCSRA, ADPS0);    // Prescaler = 128
+
+
+    // ==================================================
+    // STEP 4: Enable ADC interrupt
+    // ==================================================
+    //
+    // ADIE = ADC Interrupt Enable
+    //
+    // When conversion completes:
+    // - ADC interrupt fires
+    // - ISR(ADC_vect) runs automatically
+    //
+    // This allows NON-BLOCKING ADC reading
+    // ==================================================
+
+    bitSet(ADCSRA, ADIE);
+
+
+    // ==================================================
+    // STEP 5: Enable the ADC module
+    // ==================================================
+    //
+    // ADEN = ADC Enable
+    //
+    // Must be set AFTER configuration is complete
+    // ==================================================
+
+    bitSet(ADCSRA, ADEN);
+
+
+    // ==================================================
+    // STEP 6 (optional): Start first conversion
+    // ==================================================
+    //
+    // ADSC = ADC Start Conversion
+    //
+    // When set:
+    // - ADC begins sampling
+    // - Hardware clears ADSC when done
+    //
+    // In your program:
+    // You can either:
+    //   - start here, OR
+    //   - start in main loop (recommended)
+    // ==================================================
+
+    // bitSet(ADCSRA, ADSC);   // Optional first trigger
+}
+
+
+
+void pwm_init_leds(void)
+{
+    // --------------------------------------------------
+    // STEP 1: Configure LED pins as OUTPUTS
+    // PB1 = OC1A (Timer1 channel A)
+    // PB2 = OC1B (Timer1 channel B)
+    // PB3 = OC2A (Timer2 channel A)
+    // --------------------------------------------------
+    DDRB |= (1 << PB1) | (1 << PB2) | (1 << PB3);
+
+
+    // ==================================================
+    // TIMER1 SETUP (controls PB1 and PB2)
+    // ==================================================
+    //
+    // We use:
+    // - Fast PWM mode (8-bit)
+    // - Non-inverting mode (LED brightness increases with duty)
+    // - Prescaler = 64
+    //
+    // PWM frequency ≈ 16MHz / (64 * 256) ≈ 976 Hz
+    // ==================================================
+
+    TCCR1A = 0;   // Clear control register A
+    TCCR1B = 0;   // Clear control register B
+
+
+    // --------------------------------------------------
+    // Enable PWM output on OC1A and OC1B
+    //
+    // COM1A1 = 1, COM1A0 = 0 → non-inverting mode (OC1A)
+    // COM1B1 = 1, COM1B0 = 0 → non-inverting mode (OC1B)
+    //
+    // Non-inverting means:
+    //   OCR = 0   → LED OFF
+    //   OCR = 255 → LED FULL BRIGHT
+    // --------------------------------------------------
+    bitSet(TCCR1A, COM1A1);   // Enable PWM on PB1 (OC1A)
+    bitSet(TCCR1A, COM1B1);   // Enable PWM on PB2 (OC1B)
+
+
+    // --------------------------------------------------
+    // Select Fast PWM 8-bit mode
+    //
+    // WGM13:0 = 0b0101
+    //
+    // WGM10 = 1 (in TCCR1A)
+    // WGM12 = 1 (in TCCR1B)
+    // --------------------------------------------------
+    bitSet(TCCR1A, WGM10);
+    bitSet(TCCR1B, WGM12);
+
+
+    // --------------------------------------------------
+    // Set prescaler = 64
+    //
+    // CS12:0 = 0b011
+    //
+    // Timer clock = 16 MHz / 64 = 250 kHz
+    // --------------------------------------------------
+    bitSet(TCCR1B, CS11);
+    bitSet(TCCR1B, CS10);
+
+
+    // --------------------------------------------------
+    // Initial duty cycles (LEDs OFF)
+    //
+    // OCR1A controls PB1 (red)
+    // OCR1B controls PB2 (green)
+    // --------------------------------------------------
+    OCR1A = 0;
+    OCR1B = 0;
+
+
+
+    // ==================================================
+    // TIMER2 SETUP (controls PB3)
+    // ==================================================
+    //
+    // We use:
+    // - Fast PWM mode (8-bit)
+    // - Non-inverting mode
+    // - Prescaler = 64
+    //
+    // PWM frequency ≈ 976 Hz (similar to Timer1)
+    // ==================================================
+
+    TCCR2A = 0;   // Clear control register A
+    TCCR2B = 0;   // Clear control register B
+
+
+    // --------------------------------------------------
+    // Enable PWM output on OC2A (PB3)
+    //
+    // COM2A1 = 1, COM2A0 = 0 → non-inverting mode
+    // --------------------------------------------------
+    bitSet(TCCR2A, COM2A1);
+
+
+    // --------------------------------------------------
+    // Select Fast PWM mode
+    //
+    // WGM22:0 = 0b011
+    //
+    // WGM21 = 1
+    // WGM20 = 1
+    // --------------------------------------------------
+    bitSet(TCCR2A, WGM21);
+    bitSet(TCCR2A, WGM20);
+
+
+    // --------------------------------------------------
+    // Set prescaler = 64
+    //
+    // CS22:0 = 0b100
+    //
+    // Timer clock = 16 MHz / 64 = 250 kHz
+    // --------------------------------------------------
+    bitSet(TCCR2B, CS22);
+
+
+    // --------------------------------------------------
+    // Initial duty cycle for PB3 (yellow LED)
+    // --------------------------------------------------
+    OCR2A = 0;
+}
+
 
 
 
