@@ -443,7 +443,8 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // Total  time to  play the  buzzer  sound.  Much  slower and  the
     // ultrasonic sensor  triggers are too infrequent  or don't happen
     // at all.
-    unsigned long playtime_us = 10000; // 10ms
+//    unsigned long playtime_us = 10000; // 10ms
+    unsigned long playtime_us = 2000; // 2ms
 
     // When  the switch  is toggled  our program  runs or  stops after
     // debounceing the  switch.  We start off  with the system/circuit
@@ -602,7 +603,8 @@ void playSound(float frequency, float duty_cycle, unsigned long playtime_us,
 
     // Number of times our for loop needs to excute.
     unsigned long cycles_for_playtime; 
-    
+
+
 
     // cycles  is how  many  periods  fit into  the  whole playing  time
     // required.  As  one  invocation  of  our for  loop  below  is  one
