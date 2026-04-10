@@ -805,6 +805,11 @@ State auto_traffic_lights(float cur_duty){
     // on the photocell.  Swap the photocell and fixed resistor in the
     // voltage divider and you get the opposite effect, ADC values and
     // duty cycle values go up with increasing light on the photocell.
+    // Also, with the  linear mapping as it  is we get a  +ve slope so
+    // increasing light  gives higher  ADC and duty  values.  However,
+    // with the voltage divider circuit  I have setup, ie photocell to
+    // ground  and fixed  resistor to  power/5V you  get the  opposite
+    // effect.
     
 
     // // TODO: Currently  the transtioning of the LEDs  is coupled to
