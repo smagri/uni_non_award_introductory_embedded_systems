@@ -49,9 +49,10 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
                                  volatile uint8_t *port_sonar,
                                  volatile uint8_t *port_sonar_inputs,
                                  volatile uint8_t *ddr_buzzer,
-                                 volatile uint8_t *port_buzzer);
+                                 volatile uint8_t *port_buzzer,
+                                 float cur_duty);
 
-// Sonar/Pedestrian functions
+// Sonar/Object functions
 void playSound(float frequency, float duty_cycle, unsigned long playtime_us,
                volatile uint8_t *port_buzzer);
 float linear_mapping(float Dmm, float Dmin, float Dmax,
@@ -84,7 +85,7 @@ float get_duty_cycle(void);
 #define ADC_MIN 43 // minimum feasible ADC count for photocell
 #define ADC_MAX 1015 // maximum feasible ADC count for photocell
 #define LED_CHANGE_COUNT 20
-#define DETECTION_DISTANCE_MM 150
+#define OBJECT_DETECTION_DISTANCE_MM 150
 
 
 // PB0 equates to number 0 as seen on vscode when you press control
@@ -122,13 +123,18 @@ char *ptr_to_usart_buffer = usart_buffer;
 // or  not, data  as it  is calculated.   Input is  taken from  the PC
 // serial  monitor and  recived by  the MCU  via an  interrupt service
 // routine, hence this is a non-blocking uart RX buffer read.
-bool usart_debugging_mode_pedestrian_distance = 0;
+bool usart_debugging_mode_object_distance = 0;
 bool usart_debugging_mode_led_brightness = 0;
 bool usart_debugging_mode_1_and_2_values = 0;
+
+// Start off with no object detected by the sonar.
+bool sonar_detected_object = 0;
 
 // Set to volatile as can be changed in the ISR.  Indicates the RX
 // xfer of string from PC to MCU is complete or not.
 volatile bool flag_rx_done = 0; // Initialised to not complete.
+
+// Current ADC value read in ADC_vect ISR.
 volatile uint16_t adc_cur = 0;
 
 
@@ -280,7 +286,11 @@ int main(void){
         switch (state_current) {
             case AUTO_MODE: {
 
-                // Activate the sonar/ultrasonic sensor continuously.
+                // Activate the  sonar/ultrasonic sensor continuously.
+                // It runs  continuously so distance  measurements are
+                // always on  teleplot however  the rest of  the sonar
+                // logic  is only  activated when  there is  an object
+                // within range, that is at the pedestrian crossing.
                 state_current = traffic_light_sonar_system(ddr_switch,
                                                            port_switch,
                                                            port_switch_inputs,
@@ -288,11 +298,16 @@ int main(void){
                                                            port_sonar,
                                                            port_sonar_inputs,
                                                            ddr_buzzer,
-                                                           port_buzzer);
+                                                           port_buzzer,
+                                                           cur_duty);
 
-                // Set leds on from left to right continuously.
-                state_current = auto_traffic_lights(cur_duty);
-
+                // Set  leds  on  from  left  to  right  continuously.
+                // Unless  there  is  an   object  on  the  pedestrian
+                // crossing, that is the  sonar system had detected an
+                // object(then only the red light is on)
+                if (!sonar_detected_object){
+                    state_current = auto_traffic_lights(cur_duty);
+                }
 
                 // if (condition) {
                 //     state_current = NEXT_STATE;
@@ -358,7 +373,8 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
                                  volatile uint8_t *port_sonar,
                                  volatile uint8_t *port_sonar_inputs,
                                  volatile uint8_t *ddr_buzzer,
-                                 volatile uint8_t *port_buzzer){
+                                 volatile uint8_t *port_buzzer,
+                                 float cur_duty){
 
 
 
@@ -399,12 +415,12 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     float buzzer_delay_max = 20; // maximum feasible buzzer delay, ms.
 
     
-    // Maximum  sensor measurment  distance is  5m. v=d/t,thus t/echo_high_us_count
-    // needs  to  be  no  more than  2*5/343  sec  =  0.0292s=29200us.
-    // log2(29200) ~=15  < 16 thus  a uint16_t is sufficient  to count
-    // the number  of microseconds we  wait for echo detection  in the
-    // sensor.  Remember that the velocity of sound is about 343m/s at
-    // 25degrees.
+    // Maximum   sensor   measurment   distance  is   5m.   v=d/t,thus
+    // t/echo_high_us_count needs  to be  no more  than 2*5/343  sec =
+    // 0.0292s=29200us.   log2(29200) ~=15  <  16 thus  a uint16_t  is
+    // sufficient to count the number of microseconds we wait for echo
+    // detection in the  sensor.  Remember that the  velocity of sound
+    // is about 343m/s at 25degrees.
     //
     // log2(29200) means how many times do you take the power of 2 to
     // get 29200, this means you need approximatly 15-16bits. uint16_t
@@ -446,7 +462,7 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // ultrasonic sensor  triggers are too infrequent  or don't happen
     // at all.
 //    unsigned long playtime_us = 10000; // 10ms
-    unsigned long playtime_us = 2000; // 2ms
+    unsigned long playtime_us = 5000; // 5ms
 
     // When  the switch  is toggled  our program  runs or  stops after
     // debounceing the  switch.  We start off  with the system/circuit
@@ -498,7 +514,8 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
         _delay_us(1);
     }
     // Ensure echo pulse has completely finished.
-    while(bitCheck(*port_sonar_inputs, pin_echo));
+    while(bitCheck(*port_sonar_inputs, pin_echo))
+        ;
 
         
     // Note: Velocity  = Distance/Time,  so,
@@ -522,18 +539,18 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // seconds.
     float Dmm
         = ((float)echo_high_us_count / 1.0e6)* velocity_of_sound / 2 * 1000;
-        
 
-    // Prepare  Dmm  for  input to  vscode  Teleplot(plots  serial
-    // character values output to the serial port).
+
+    // Prepare Dmm for input to vscode Teleplot(plots serial character
+    // values output to the serial port).
     //
-    // It must be in this format for TELEPLOT to plot values.
-    // Name of teleplot can change by RENAMING Dmm string to
-    // something else, that is >SomethingElse:\n
+    // It must be in this format for TELEPLOT to plot values.  Name of
+    // teleplot can change  by RENAMING Dmm string  to something else,
+    // that is >SomethingElse:\n
     //
-    if (usart_debugging_mode_pedestrian_distance){
+    if (usart_debugging_mode_object_distance){
         // Print  out   Distance_mm,  the  current  distance   to  the
-        // pedestrian via vscode Teleplot.  Values sent to Teleplot in
+        // object via vscode Teleplot.  Values sent to Teleplot in
         // format it expects.
         
         usart_send_string(">sonar_distance_mm:");
@@ -543,6 +560,44 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
         usart_send_string("\n");
     }
 
+
+    // If we haven't detected an  object within a minimum distance yet
+    // we don't activate the pedestrian crossing audio system.
+    if (Dmm <= OBJECT_DETECTION_DISTANCE_MM){
+        sonar_detected_object = 1;
+        
+        // Force red on, others off.
+        OCR1A = (uint8_t)cur_duty; // red set to current duty cycle
+        OCR1B = 0;     // green off
+        OCR2A = 0;     // yellow off
+
+    }
+    else{
+        sonar_detected_object = 0;
+    }
+    
+    
+    // Only play sonar sounds when the object is within required range
+    // of  operation.   That  is,  an  object  is  at  the  pedestrian
+    // crossing.
+    if (!sonar_detected_object){
+
+        // make sure buzzer is off
+        //bitClear(*port_buzzer, pin_passive_buzzer);
+
+        // However,   a   delay   is  still   required   for   HC-SR04
+        // ultrasonic`sensor  so it  doesn't  get  triggers too  fast.
+        // That is, the  sensor needs a minimum  delay between trigger
+        // pulses to reset.
+        //
+        // Started  with a  200ms delay  so the  distance measurements
+        // take longer  to aquire.   Hence, the sensor  distances give
+        // the appearance of not measuring correctly.
+        //
+        _delay_ms(60);
+
+        return AUTO_MODE;
+    }
     
     // Linearly map  the distance, from  the ultrasonic sensor  to the
     // object, against the buzzer delay.  
@@ -573,7 +628,6 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
 
     for (uint16_t i = 0; i<delay; i++) {
         _delay_ms(1);
-        //_delay_us(1);
     }
 
 
@@ -589,18 +643,6 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     //
     // When using playsound(...) we get a >=50ms pulse here anyhow
     // though so we don't need an extra delay here.
-    if (Dmm < DETECTION_DISTANCE_MM)
-    {
-        // Turn OFF all LEDs
-        OCR1A = 0;
-        OCR1B = 0;
-        OCR2A = 0;
-
-        // Turn ON RED LED only
-        OCR1A = 255;   // full brightness
-
-        return AUTO_MODE; // skip normal LED cycling
-    }
         
     return AUTO_MODE;
 }
@@ -912,12 +954,14 @@ State auto_traffic_lights(float cur_duty){
         //     // _delay_ms(100);
         //     // _delay_us(1);
         // }
-        usart_send_string(">adc:");
-        usart_send_num((float)adc_cur, 4, 0);
-        usart_send_string("\n");
+        // usart_send_string(">adc:");
+        // usart_send_num((float)adc_cur, 4, 0);
+        // usart_send_string("\n");
 
-        usart_send_string(">duty:");
-        usart_send_num(cur_duty, 3, 0);
+        // LED off = 0 and LED brightest = 255.
+        float cur_duty_percentage = (cur_duty / 255.0) * 100.0;
+        usart_send_string(">duty(%):");
+        usart_send_num(cur_duty_percentage, 3, 0);
         usart_send_string("\n");
         //_delay_ms(100);
     }
@@ -991,7 +1035,7 @@ void print_usart_debugging_mode_menu(void){
     usart_send_byte('\n');
     usart_send_string("\nEnter a number for usart debugging required:\n");
     usart_send_string("0. Switch off debugging mode, no data from MCU to PC.\n");
-    usart_send_string("1. Send pedestrian distance measurments to PC.\n");
+    usart_send_string("1. Send object distance measurments to PC.\n");
     usart_send_string("2. Send ambient brightness measurments to PC.\n");
     usart_send_string("3. Both data in mode 1 and 2 sent to PC.\n");
     
@@ -1005,14 +1049,14 @@ void set_user_required_usart_debugging_mode(int8_t user_choice){
     switch (user_choice) {
         case 0: {
             usart_send_string("\nDebugging mode has been turned off.\n");
-            usart_debugging_mode_pedestrian_distance = 0;
+            usart_debugging_mode_object_distance = 0;
             usart_debugging_mode_led_brightness = 0;
             break;
         }
         case 1: {
-            usart_send_string("\nSending pedestrian distance measurments");
+            usart_send_string("\nSending object distance measurments");
             usart_send_string(" to PC via Teleplot\n");
-            usart_debugging_mode_pedestrian_distance = 1;
+            usart_debugging_mode_object_distance = 1;
             usart_debugging_mode_led_brightness = 0;
             break;
         }
@@ -1020,13 +1064,13 @@ void set_user_required_usart_debugging_mode(int8_t user_choice){
             usart_send_string("\nSending ambient brightness measurements");
             usart_send_string(" to PC via Teleplot\n");
             usart_debugging_mode_led_brightness = 1;
-            usart_debugging_mode_pedestrian_distance = 0;
+            usart_debugging_mode_object_distance = 0;
             break;
         }
         case 3: {
             usart_send_string("\nSending both data measurements from mode 1 and 2");
             usart_send_string(" to PC via Teleplot\n");
-            usart_debugging_mode_pedestrian_distance = 1;
+            usart_debugging_mode_object_distance = 1;
             usart_debugging_mode_led_brightness = 1;
             break;
         }
