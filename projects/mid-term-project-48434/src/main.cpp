@@ -112,8 +112,9 @@ float get_duty_cycle(void);
 #define pin_led_green PB2
 #define pin_led_yellow PB3
 
-// External Interrupt INT1
+// External Interrupt INT1, to trigger EMERGENCY_MODE
 #define pin_int1_interrupt PD3
+#define pin_pcint10_interrupt PC2
 
 
 // Our program buffer  that stores TX/RX data for the  Arduino that we
@@ -140,6 +141,15 @@ volatile bool flag_rx_done = 0; // Initialised to not complete.
 
 // Initialised not to be active.  The ISR(INT1_vect) routine that sets the flag.
 volatile bool flag_emergency_mode_request = 0;
+
+// Initialised not to be active.  For PCINT10 ISR(PCINT1_vect) routine
+// that sets the flag.
+volatile bool flag_manual_mode_request = 0;
+
+// Controls whether in manual mode we are turning of auto mode or
+// turning it back on.  Auto mode is normally on when the circuit
+// starts to operate.
+volatile bool flag_auto_mode_toggle = 1;
 
 // Current ADC value read in ADC_vect ISR.
 volatile uint16_t adc_cur = 0;
@@ -175,6 +185,8 @@ ISR(USART_RX_vect){
 
 
 ISR(ADC_vect){
+
+    // System ADC reading ISR routine
         
     //usart_send_string("dbg: in ISR");
     
@@ -185,14 +197,49 @@ ISR(ADC_vect){
 
 ISR(INT1_vect){
 
+    // System INT1 flag change to emergency mode.
+    
      // crude debouncing // TODO: implement proper debounceing code.
     _delay_ms(10);
-    flag_emergency_mode_request = 1;
+    if (!bitRead(PIND, pin_int1_interrupt))
+        flag_emergency_mode_request = 1;
+
     usart_send_string("\ndbg: INT1_vect(): in ISR\n");
-    // if (bitRead(PIND, pin_int1_interrupt)){
-    //     state_current = EMERGENCY_MODE;
+}
+
+
+
+ISR(PCINT1_vect){
+
+    // PCINT1  for  PCINT10  to  enable manual  mode  and  toggle  the
+    // AUTO_MODE on and off.
+
+    // PCINT1_vect fires  on any change  of PCIN10, not just  a button
+    // press.  This means press edge and release edge, bounce on press
+    // and release.
+
+    // crude debouncing // TODO: implement proper debounceing code.
+    _delay_ms(10);
+
+    // In the setupt code the setting the internal pull-up makes
+    // PC2=PCINT10 high, so here we look for when it is low.
+    if (!bitRead(PINC, pin_pcint10_interrupt)) {
+        flag_manual_mode_request = 1;
+        flag_auto_mode_toggle = !flag_auto_mode_toggle;
+    }
+    // flag_manual_mode_request = 1;
+
+    // // Toggle AUTO_MODE from the MANUAL_MODE.
+    // if (!flag_auto_mode_toggle){
+    //     // Toggle AUTO_MODE on.
+    //     flag_auto_mode_toggle = 1;
     // }
-    //        flag_enter_emergency_mode = 1;
+    // else if (flag_auto_mode_toggle){
+    //     // Toggle AUTO_MODE off.
+    //     flag_auto_mode_toggle = 0;
+    // }
+
+    usart_send_string("\ndbg: PCINT1_vect: in ISR\n");
 }
 
 
@@ -267,10 +314,16 @@ int main(void){
     // bitClear(*port_sonar, pin_led_yellow);
 
 
-    // Enable pin for INT1 as an input.  Then enable the pullup resistor.
+    // Enable pin for INT1 as an input.  Then enable the pullup
+    // resistor which sets the port pin HIGH.
     bitClear(DDRD, pin_int1_interrupt);
-    bitSet(PORTD, pin_int1_interrupt); // enable pullup resistor
-    
+    bitSet(PORTD, pin_int1_interrupt);
+
+    // Enable  pin  for  PCINT10  as  an  input,  then  enable  pullup
+    // resistor which sets port pin to HIGH.
+    bitClear(DDRC, pin_pcint10_interrupt);
+    bitSet(PORTC, pin_pcint10_interrupt);
+        
     
     
 
@@ -305,8 +358,7 @@ int main(void){
 
         usart_debugging();
 
-
-        // Read photocell ADC and determine duty cycle via linear
+        // Read  photocell ADC  and  determine duty  cycle via  linear
         // mapping, that is, adc values vs duty cucle.
         cur_duty = get_duty_cycle();
 
@@ -316,11 +368,19 @@ int main(void){
         usart_send_string("\n");
         _delay_ms(1);
 
+        
+        // Setup state machine mode transitions.
         if (flag_emergency_mode_request){
             flag_emergency_mode_request = 0;
             state_current = EMERGENCY_MODE;
         }
-        
+
+        if (flag_manual_mode_request ){
+            flag_manual_mode_request = 0;
+            state_current = MANUAL_MODE;
+        }
+
+        // Implementation of state machine modes.
         switch (state_current) {
             case AUTO_MODE: {
 
@@ -350,6 +410,22 @@ int main(void){
                 break;
             }
             case MANUAL_MODE: {
+
+                usart_send_string("\ndbg: in MANUAL_MODE\n");
+                
+                // Toggling  A2  arduino  pin, connected  to  PC2  and
+                // equating to PCINT10 runs the PCINT1 ISR.
+                if (flag_auto_mode_toggle){
+                    usart_send_string("\ndbg: change mode ON AUTO_MODE\n");
+                    state_current = AUTO_MODE;
+                }
+                else{
+                    usart_send_string("\ndbg: change mode OFF AUTO_MODE\n");
+                    // Turn off all LEDs
+                    OCR1A = 0; // red (PB1 / OC1A)
+                    OCR1B = 0; // green (PB2 / OC1B)
+                    OCR2A = 0; // yellow(PB3 / OC2A)
+                }
             
                 break;
             }
@@ -357,11 +433,9 @@ int main(void){
 
                 usart_send_string("\ndbg: in EMERGENCY_MODE\n");
                 // LED green is enabled, all other LEDs are turned off.
-                OCR1A = 0;   // red (PB1 / OC1A)
+                OCR1A = 0;          // red (PB1 / OC1A)
                 OCR1B = cur_duty;   // green (PB2 / OC1B)
-                OCR2A = 0;   // yellow(PB3 / OC2A)
-
-                
+                OCR2A = 0;          // yellow(PB3 / OC2A)
 
                 break;
             }
@@ -1244,6 +1318,8 @@ void adc_init(void)
 
 void interrupt_init(void){
 
+    // INIT1 configuration: ////////////////////////////////////////////////////
+    
     // Clear INT1 sense bits first
     EICRA &= ~((1 << ISC11) | (1 << ISC10));
 
@@ -1259,6 +1335,17 @@ void interrupt_init(void){
 
     // Enable INT1
     EIMSK |= (1 << INT1);
+
+
+
+    // PCINT10 configuration with PCIE1 ////////////////////////////////////////
+
+    // Port C's PCINT10 pin used so enable so PCIE1 is the pin change interrupt.
+    PCICR |= (1 << PCIE1); // Set Pin Change Inerrupt Control Register.
+
+    PCMSK1 |= (1 << PCINT10); //Set Pin Change Mask Register 1
+
+    
 
 }
 
@@ -1389,6 +1476,97 @@ void pwm_init_leds(void)
     // Initial duty cycle for PB3 (yellow LED)
     // --------------------------------------------------
     OCR2A = 0;
+}
+
+
+
+void leds_off_hard(void)
+{
+    // --------------------------------------------------
+    // STEP 1: Set PWM duty cycles to zero
+    // --------------------------------------------------
+    //
+    // This *should* turn LEDs off, but in Fast PWM mode
+    // the hardware can still generate a very narrow pulse
+    // even when OCR = 0.
+    //
+    // That small pulse is enough to make LEDs glow faintly.
+    // --------------------------------------------------
+    OCR1A = 0;   // PB1 (red)
+    OCR1B = 0;   // PB2 (green)
+    OCR2A = 0;   // PB3 (yellow)
+
+
+    // --------------------------------------------------
+    // STEP 2: Disconnect PWM hardware from the pins
+    // --------------------------------------------------
+    //
+    // While COMnx bits are set, the TIMER hardware controls
+    // the pin, NOT PORTB.
+    //
+    // Clearing these bits:
+    // → disconnects PWM
+    // → returns control of the pins back to normal GPIO
+    //
+    // After this, we can manually force pins LOW.
+    // --------------------------------------------------
+
+    // Disable PWM on Timer1 outputs (PB1 and PB2)
+    TCCR1A &= ~((1 << COM1A1) | (1 << COM1A0) |   // OC1A (PB1)
+                (1 << COM1B1) | (1 << COM1B0));  // OC1B (PB2)
+
+    // Disable PWM on Timer2 output (PB3)
+    TCCR2A &= ~((1 << COM2A1) | (1 << COM2A0));  // OC2A (PB3)
+
+
+    // --------------------------------------------------
+    // STEP 3: Force pins LOW manually
+    // --------------------------------------------------
+    //
+    // Now that PWM is disconnected, PORTB writes work again.
+    //
+    // Driving LOW ensures LEDs are completely OFF.
+    // --------------------------------------------------
+    PORTB &= ~((1 << PB1) | (1 << PB2) | (1 << PB3));
+}
+
+
+void leds_pwm_enable(void)
+{
+    // --------------------------------------------------
+    // STEP 1: Reconnect Timer1 PWM outputs
+    // --------------------------------------------------
+    //
+    // COM1A1 = 1, COM1A0 = 0 → Non-inverting PWM on OC1A (PB1)
+    // COM1B1 = 1, COM1B0 = 0 → Non-inverting PWM on OC1B (PB2)
+    //
+    // Non-inverting mode:
+    //   OCR = 0   → LED OFF
+    //   OCR = 255 → LED fully ON
+    // --------------------------------------------------
+    TCCR1A |= (1 << COM1A1) | (1 << COM1B1);
+    TCCR1A &= ~((1 << COM1A0) | (1 << COM1B0));
+
+
+    // --------------------------------------------------
+    // STEP 2: Reconnect Timer2 PWM output
+    // --------------------------------------------------
+    //
+    // COM2A1 = 1, COM2A0 = 0 → Non-inverting PWM on OC2A (PB3)
+    // --------------------------------------------------
+    TCCR2A |= (1 << COM2A1);
+    TCCR2A &= ~(1 << COM2A0);
+
+
+    // --------------------------------------------------
+    // STEP 3: PWM hardware now controls the pins again
+    // --------------------------------------------------
+    //
+    // IMPORTANT:
+    // - PORTB writes will now be ignored for these pins
+    // - Brightness must be controlled using OCR registers:
+    //     OCR1A (PB1), OCR1B (PB2), OCR2A (PB3)
+    // --------------------------------------------------
 }
 
 
