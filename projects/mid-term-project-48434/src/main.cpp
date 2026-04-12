@@ -40,9 +40,9 @@ typedef enum{
 
 
 // State Machine modes functions.
-State auto_traffic_lights(float cur_duty);
+void auto_traffic_lights(float cur_duty);
 
-State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
+void traffic_light_sonar_system(volatile uint8_t *ddr_switch,
                                  volatile uint8_t *port_switch,
                                  volatile uint8_t *port_switch_inputs,
                                  volatile uint8_t *ddr_sonar,
@@ -76,7 +76,8 @@ void pwm_init_leds(void);
 void adc_init(void);
 void interrupt_init(void);
 float get_duty_cycle(void);
-
+void leds_off_hard(void);
+void leds_pwm_enable(void);
 
 // Global definitions, hence available to all functions.
 #define BUFFER_SIZE 50
@@ -204,7 +205,7 @@ ISR(INT1_vect){
     if (!bitRead(PIND, pin_int1_interrupt))
         flag_emergency_mode_request = 1;
 
-    usart_send_string("\ndbg: INT1_vect(): in ISR\n");
+    //usart_send_string("\ndbg: INT1_vect(): in ISR\n");
 }
 
 
@@ -227,19 +228,8 @@ ISR(PCINT1_vect){
         flag_manual_mode_request = 1;
         flag_auto_mode_toggle = !flag_auto_mode_toggle;
     }
-    // flag_manual_mode_request = 1;
 
-    // // Toggle AUTO_MODE from the MANUAL_MODE.
-    // if (!flag_auto_mode_toggle){
-    //     // Toggle AUTO_MODE on.
-    //     flag_auto_mode_toggle = 1;
-    // }
-    // else if (flag_auto_mode_toggle){
-    //     // Toggle AUTO_MODE off.
-    //     flag_auto_mode_toggle = 0;
-    // }
-
-    usart_send_string("\ndbg: PCINT1_vect: in ISR\n");
+    //usart_send_string("\ndbg: PCINT1_vect: in ISR\n");
 }
 
 
@@ -380,10 +370,29 @@ int main(void){
             state_current = MANUAL_MODE;
         }
 
+        // --------------------------------------------
+        // Handle PWM connection ONLY on state change
+        // --------------------------------------------
+        static State state_previous = AUTO_MODE;
+
+        if (state_current != state_previous){
+
+            if (state_current == MANUAL_MODE && !flag_auto_mode_toggle){
+                leds_off_hard();   // fully disconnect + force OFF
+            }
+            else{
+                leds_pwm_enable(); // reconnect PWM
+            }
+
+            state_previous = state_current;
+        }
+
+        
         // Implementation of state machine modes.
         switch (state_current) {
             case AUTO_MODE: {
-
+                //leds_pwm_enable();
+                
                 // Activate the  sonar/ultrasonic sensor continuously.
                 // It runs  continuously so distance  measurements are
                 // always on  teleplot however  the rest of  the sonar
@@ -404,9 +413,6 @@ int main(void){
                     auto_traffic_lights(cur_duty);
                 }
 
-                // if (condition) {
-                //     state_current = NEXT_STATE;
-                // }
                 break;
             }
             case MANUAL_MODE: {
@@ -425,11 +431,13 @@ int main(void){
                     OCR1A = 0; // red (PB1 / OC1A)
                     OCR1B = 0; // green (PB2 / OC1B)
                     OCR2A = 0; // yellow(PB3 / OC2A)
+                    //leds_off_hard();
                 }
             
                 break;
             }
             case EMERGENCY_MODE: {
+                //leds_pwm_enable();
 
                 usart_send_string("\ndbg: in EMERGENCY_MODE\n");
                 // LED green is enabled, all other LEDs are turned off.
@@ -482,15 +490,15 @@ float get_duty_cycle(void){
 
 
 
-State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
-                                 volatile uint8_t *port_switch,
-                                 volatile uint8_t *port_switch_inputs,
-                                 volatile uint8_t *ddr_sonar,
-                                 volatile uint8_t *port_sonar,
-                                 volatile uint8_t *port_sonar_inputs,
-                                 volatile uint8_t *ddr_buzzer,
-                                 volatile uint8_t *port_buzzer,
-                                 float cur_duty){
+void traffic_light_sonar_system(volatile uint8_t *ddr_switch,
+                                volatile uint8_t *port_switch,
+                                volatile uint8_t *port_switch_inputs,
+                                volatile uint8_t *ddr_sonar,
+                                volatile uint8_t *port_sonar,
+                                volatile uint8_t *port_sonar_inputs,
+                                volatile uint8_t *ddr_buzzer,
+                                volatile uint8_t *port_buzzer,
+                                float cur_duty){
 
 
 
@@ -760,7 +768,8 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // When using playsound(...) we get a >=50ms pulse here anyhow
     // though so we don't need an extra delay here.
         
-    return AUTO_MODE;
+
+    return;
 }
 
 
@@ -852,30 +861,6 @@ float linear_mapping(float Dmm, float Dmin, float Dmax,
 
 
 
-
-//uint8_t linear_map_to_pwm(float x, float xmin, float xmax,
-//                           uint8_t pwm_min, uint8_t pwm_max)
-// {
-//     float y;
-
-//     if (x < xmin)
-//         x = xmin;
-
-//     if (x > xmax)
-//         x = xmax;
-
-//     y = pwm_min + (x - xmin) * (pwm_max - pwm_min) / (xmax - xmin);
-
-//     if (y < 0)
-//         y = 0;
-
-//     if (y > 255)
-//         y = 255;
-
-//     return (uint8_t)y;
-// }
-
-
 // Button/switch pin debouncing.  We execute  a delay of ms(amount has
 // to be determined emperically because  every button is different) on
 // the transition of  the button form high-low and  low-high to factor
@@ -942,7 +927,7 @@ void debounce_switch(volatile uint8_t *ddr_switch, volatile uint8_t *port_switch
 
 
 
-State auto_traffic_lights(float cur_duty){
+void auto_traffic_lights(float cur_duty){
 
     // Transitioning all the LEDs of the traffic light system.  Form
     // Left->Right continuously.
@@ -1083,7 +1068,7 @@ State auto_traffic_lights(float cur_duty){
     }
 
 
-    return AUTO_MODE;
+    return;
 }
 
 
@@ -1351,13 +1336,23 @@ void interrupt_init(void){
 
 
 
+
 void pwm_init_leds(void)
 {
+    
+    // Configure PWM timers, one time hardware setup.  Without this no
+    // PWM signal exists. OCR registers  do nothing.  LEDs wont dim or
+    // brighten depending on duty cycle.
+    
     // --------------------------------------------------
     // STEP 1: Configure LED pins as OUTPUTS
-    // PB1 = OC1A (Timer1 channel A)
-    // PB2 = OC1B (Timer1 channel B)
-    // PB3 = OC2A (Timer2 channel A)
+    // --------------------------------------------------
+    //
+    // PB1 = OC1A → Timer1 channel A → Red LED
+    // PB2 = OC1B → Timer1 channel B → Green LED
+    // PB3 = OC2A → Timer2 channel A → Yellow LED
+    //
+    // Setting bits in DDRB makes these pins outputs.
     // --------------------------------------------------
     DDRB |= (1 << PB1) | (1 << PB2) | (1 << PB3);
 
@@ -1366,27 +1361,33 @@ void pwm_init_leds(void)
     // TIMER1 SETUP (controls PB1 and PB2)
     // ==================================================
     //
-    // We use:
-    // - Fast PWM mode (8-bit)
-    // - Non-inverting mode (LED brightness increases with duty)
-    // - Prescaler = 64
+    // We configure Timer1 to:
+    // - Use Fast PWM (8-bit)
+    // - Use non-inverting mode
+    // - Use a prescaler of 64
     //
-    // PWM frequency ≈ 16MHz / (64 * 256) ≈ 976 Hz
+    // Resulting PWM frequency:
+    //   f_PWM ≈ 16MHz / (64 * 256) ≈ 976 Hz
+    //
+    // This is fast enough for LED brightness control
+    // (no visible flicker).
     // ==================================================
 
-    TCCR1A = 0;   // Clear control register A
-    TCCR1B = 0;   // Clear control register B
+    // Clear control registers before configuration
+    TCCR1A = 0;
+    TCCR1B = 0;
 
 
     // --------------------------------------------------
     // Enable PWM output on OC1A and OC1B
+    // --------------------------------------------------
     //
-    // COM1A1 = 1, COM1A0 = 0 → non-inverting mode (OC1A)
-    // COM1B1 = 1, COM1B0 = 0 → non-inverting mode (OC1B)
+    // COM1A1 = 1, COM1A0 = 0 → Non-inverting PWM (OC1A)
+    // COM1B1 = 1, COM1B0 = 0 → Non-inverting PWM (OC1B)
     //
-    // Non-inverting means:
-    //   OCR = 0   → LED OFF
-    //   OCR = 255 → LED FULL BRIGHT
+    // Non-inverting mode means:
+    //   OCR = 0   → LED OFF (almost always LOW)
+    //   OCR = 255 → LED fully ON (almost always HIGH)
     // --------------------------------------------------
     bitSet(TCCR1A, COM1A1);   // Enable PWM on PB1 (OC1A)
     bitSet(TCCR1A, COM1B1);   // Enable PWM on PB2 (OC1B)
@@ -1394,11 +1395,16 @@ void pwm_init_leds(void)
 
     // --------------------------------------------------
     // Select Fast PWM 8-bit mode
+    // --------------------------------------------------
     //
     // WGM13:0 = 0b0101
     //
     // WGM10 = 1 (in TCCR1A)
     // WGM12 = 1 (in TCCR1B)
+    //
+    // This gives:
+    // - 8-bit resolution (0–255)
+    // - Fast PWM operation
     // --------------------------------------------------
     bitSet(TCCR1A, WGM10);
     bitSet(TCCR1B, WGM12);
@@ -1406,6 +1412,7 @@ void pwm_init_leds(void)
 
     // --------------------------------------------------
     // Set prescaler = 64
+    // --------------------------------------------------
     //
     // CS12:0 = 0b011
     //
@@ -1416,10 +1423,13 @@ void pwm_init_leds(void)
 
 
     // --------------------------------------------------
-    // Initial duty cycles (LEDs OFF)
+    // Initialise duty cycles (LEDs OFF)
+    // --------------------------------------------------
     //
-    // OCR1A controls PB1 (red)
-    // OCR1B controls PB2 (green)
+    // OCR1A controls PB1 (red LED)
+    // OCR1B controls PB2 (green LED)
+    //
+    // Setting to 0 gives minimum duty cycle.
     // --------------------------------------------------
     OCR1A = 0;
     OCR1B = 0;
@@ -1430,28 +1440,33 @@ void pwm_init_leds(void)
     // TIMER2 SETUP (controls PB3)
     // ==================================================
     //
-    // We use:
-    // - Fast PWM mode (8-bit)
-    // - Non-inverting mode
+    // Timer2 is used for the yellow LED (PB3 / OC2A)
+    //
+    // Configuration:
+    // - Fast PWM mode
+    // - Non-inverting output
     // - Prescaler = 64
     //
-    // PWM frequency ≈ 976 Hz (similar to Timer1)
+    // PWM frequency is similar to Timer1 (~976 Hz)
     // ==================================================
 
-    TCCR2A = 0;   // Clear control register A
-    TCCR2B = 0;   // Clear control register B
+    // Clear control registers
+    TCCR2A = 0;
+    TCCR2B = 0;
 
 
     // --------------------------------------------------
     // Enable PWM output on OC2A (PB3)
+    // --------------------------------------------------
     //
-    // COM2A1 = 1, COM2A0 = 0 → non-inverting mode
+    // COM2A1 = 1, COM2A0 = 0 → Non-inverting PWM
     // --------------------------------------------------
     bitSet(TCCR2A, COM2A1);
 
 
     // --------------------------------------------------
     // Select Fast PWM mode
+    // --------------------------------------------------
     //
     // WGM22:0 = 0b011
     //
@@ -1464,6 +1479,7 @@ void pwm_init_leds(void)
 
     // --------------------------------------------------
     // Set prescaler = 64
+    // --------------------------------------------------
     //
     // CS22:0 = 0b100
     //
@@ -1473,76 +1489,82 @@ void pwm_init_leds(void)
 
 
     // --------------------------------------------------
-    // Initial duty cycle for PB3 (yellow LED)
+    // Initialise duty cycle (LED OFF)
+    // --------------------------------------------------
+    //
+    // OCR2A controls PB3 (yellow LED)
     // --------------------------------------------------
     OCR2A = 0;
 }
 
 
-
 void leds_off_hard(void)
 {
+
+    // Disconnect PWM timers and return pins to normal GPIO and forces
+    // pins totally low/off.   After this PWM no  longer affects pins.
+    // LEDs are  guaranteed OFF.  This  is required as  the configured
+    // Fast PWM  can still  leave a  tiny pulse,  hence faint  glow of
+    // LEDs.
+    
     // --------------------------------------------------
     // STEP 1: Set PWM duty cycles to zero
     // --------------------------------------------------
     //
-    // This *should* turn LEDs off, but in Fast PWM mode
-    // the hardware can still generate a very narrow pulse
-    // even when OCR = 0.
-    //
-    // That small pulse is enough to make LEDs glow faintly.
+    // In Fast PWM mode, OCR = 0 can still leave a tiny pulse
+    // on the output pin. That can make the LED glow faintly.
+    // So setting OCR = 0 alone is not enough for a guaranteed OFF.
     // --------------------------------------------------
-    OCR1A = 0;   // PB1 (red)
-    OCR1B = 0;   // PB2 (green)
-    OCR2A = 0;   // PB3 (yellow)
+    OCR1A = 0;   // PB1 / OC1A / red
+    OCR1B = 0;   // PB2 / OC1B / green
+    OCR2A = 0;   // PB3 / OC2A / yellow
 
 
     // --------------------------------------------------
-    // STEP 2: Disconnect PWM hardware from the pins
+    // STEP 2: Disconnect PWM hardware from LED pins
     // --------------------------------------------------
     //
-    // While COMnx bits are set, the TIMER hardware controls
-    // the pin, NOT PORTB.
-    //
-    // Clearing these bits:
-    // → disconnects PWM
-    // → returns control of the pins back to normal GPIO
-    //
-    // After this, we can manually force pins LOW.
+    // While the COM bits are set, the timer peripheral owns
+    // the output pins. Clearing those bits returns the pins
+    // to normal GPIO control.
     // --------------------------------------------------
 
-    // Disable PWM on Timer1 outputs (PB1 and PB2)
-    TCCR1A &= ~((1 << COM1A1) | (1 << COM1A0) |   // OC1A (PB1)
-                (1 << COM1B1) | (1 << COM1B0));  // OC1B (PB2)
+    // Disconnect Timer1 PWM from OC1A and OC1B
+    TCCR1A &= ~((1 << COM1A1) | (1 << COM1A0) |
+                (1 << COM1B1) | (1 << COM1B0));
 
-    // Disable PWM on Timer2 output (PB3)
-    TCCR2A &= ~((1 << COM2A1) | (1 << COM2A0));  // OC2A (PB3)
+    // Disconnect Timer2 PWM from OC2A
+    TCCR2A &= ~((1 << COM2A1) | (1 << COM2A0));
 
 
     // --------------------------------------------------
-    // STEP 3: Force pins LOW manually
+    // STEP 3: Force the LED pins LOW
     // --------------------------------------------------
     //
-    // Now that PWM is disconnected, PORTB writes work again.
-    //
-    // Driving LOW ensures LEDs are completely OFF.
+    // Now that PWM is disconnected, PORTB writes control the pins.
+    // Driving them LOW turns the LEDs fully off.
     // --------------------------------------------------
     PORTB &= ~((1 << PB1) | (1 << PB2) | (1 << PB3));
 }
 
 
+
 void leds_pwm_enable(void)
 {
+
+    // Connect PWM timer output to pins.  OOCR1A, OCR1B, OCR2A control
+    // brightness PORTB writes are ignored.
+    
     // --------------------------------------------------
     // STEP 1: Reconnect Timer1 PWM outputs
     // --------------------------------------------------
     //
-    // COM1A1 = 1, COM1A0 = 0 → Non-inverting PWM on OC1A (PB1)
-    // COM1B1 = 1, COM1B0 = 0 → Non-inverting PWM on OC1B (PB2)
+    // Non-inverting PWM:
+    //   OCR = 0   -> output low almost all the time
+    //   OCR = 255 -> output high almost all the time
     //
-    // Non-inverting mode:
-    //   OCR = 0   → LED OFF
-    //   OCR = 255 → LED fully ON
+    // OC1A -> PB1
+    // OC1B -> PB2
     // --------------------------------------------------
     TCCR1A |= (1 << COM1A1) | (1 << COM1B1);
     TCCR1A &= ~((1 << COM1A0) | (1 << COM1B0));
@@ -1552,23 +1574,11 @@ void leds_pwm_enable(void)
     // STEP 2: Reconnect Timer2 PWM output
     // --------------------------------------------------
     //
-    // COM2A1 = 1, COM2A0 = 0 → Non-inverting PWM on OC2A (PB3)
+    // OC2A -> PB3
     // --------------------------------------------------
     TCCR2A |= (1 << COM2A1);
     TCCR2A &= ~(1 << COM2A0);
-
-
-    // --------------------------------------------------
-    // STEP 3: PWM hardware now controls the pins again
-    // --------------------------------------------------
-    //
-    // IMPORTANT:
-    // - PORTB writes will now be ignored for these pins
-    // - Brightness must be controlled using OCR registers:
-    //     OCR1A (PB1), OCR1B (PB2), OCR2A (PB3)
-    // --------------------------------------------------
 }
-
 
 
 
