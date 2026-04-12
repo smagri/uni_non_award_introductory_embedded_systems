@@ -74,6 +74,7 @@ void print_usart_debugging_mode_menu(void);
 void set_user_required_usart_debugging_mode(int8_t user_choice);
 void pwm_init_leds(void);
 void adc_init(void);
+void interrupt_init(void);
 float get_duty_cycle(void);
 
 
@@ -111,6 +112,9 @@ float get_duty_cycle(void);
 #define pin_led_green PB2
 #define pin_led_yellow PB3
 
+// External Interrupt INT1
+#define pin_int1_interrupt PD3
+
 
 // Our program buffer  that stores TX/RX data for the  Arduino that we
 // want to transmit from MCU->PC or recive data from the PC->MCU.
@@ -134,8 +138,13 @@ bool sonar_detected_object = 0;
 // xfer of string from PC to MCU is complete or not.
 volatile bool flag_rx_done = 0; // Initialised to not complete.
 
+// Initialised not to be active.  The ISR(INT1_vect) routine that sets the flag.
+volatile bool flag_emergency_mode_request = 0;
+
 // Current ADC value read in ADC_vect ISR.
 volatile uint16_t adc_cur = 0;
+volatile uint16_t cur_duty = 0;
+volatile State state_current;
 
 
 ISR(USART_RX_vect){
@@ -171,6 +180,19 @@ ISR(ADC_vect){
     
     // Triggers when interrupt conversion is complete.
     adc_cur = ADC; // Read ADC data register.
+}
+
+
+ISR(INT1_vect){
+
+     // crude debouncing // TODO: implement proper debounceing code.
+    _delay_ms(10);
+    flag_emergency_mode_request = 1;
+    usart_send_string("\ndbg: INT1_vect(): in ISR\n");
+    // if (bitRead(PIND, pin_int1_interrupt)){
+    //     state_current = EMERGENCY_MODE;
+    // }
+    //        flag_enter_emergency_mode = 1;
 }
 
 
@@ -243,6 +265,12 @@ int main(void){
     // bitClear(*port_sonar, pin_led_red);
     // bitClear(*port_sonar, pin_led_green);
     // bitClear(*port_sonar, pin_led_yellow);
+
+
+    // Enable pin for INT1 as an input.  Then enable the pullup resistor.
+    bitClear(DDRD, pin_int1_interrupt);
+    bitSet(PORTD, pin_int1_interrupt); // enable pullup resistor
+    
     
     
 
@@ -251,11 +279,11 @@ int main(void){
     _delay_ms(100);
     pwm_init_leds();
     adc_init();
+    interrupt_init();
 
     sei(); // Enable global interrupts.
     
     
-    State state_current;
     state_current = AUTO_MODE;
 
     usart_flush();
@@ -280,8 +308,18 @@ int main(void){
 
         // Read photocell ADC and determine duty cycle via linear
         // mapping, that is, adc values vs duty cucle.
-        float cur_duty = get_duty_cycle();
+        cur_duty = get_duty_cycle();
 
+        // Debugging
+        usart_send_string(">state:");
+        usart_send_num(state_current, 2, 0);
+        usart_send_string("\n");
+        _delay_ms(1);
+
+        if (flag_emergency_mode_request){
+            flag_emergency_mode_request = 0;
+            state_current = EMERGENCY_MODE;
+        }
         
         switch (state_current) {
             case AUTO_MODE: {
@@ -291,22 +329,19 @@ int main(void){
                 // always on  teleplot however  the rest of  the sonar
                 // logic  is only  activated when  there is  an object
                 // within range, that is at the pedestrian crossing.
-                state_current = traffic_light_sonar_system(ddr_switch,
-                                                           port_switch,
-                                                           port_switch_inputs,
-                                                           ddr_sonar,
-                                                           port_sonar,
-                                                           port_sonar_inputs,
-                                                           ddr_buzzer,
-                                                           port_buzzer,
-                                                           cur_duty);
+                traffic_light_sonar_system(ddr_switch, port_switch,
+                                           port_switch_inputs,
+                                           ddr_sonar, port_sonar,
+                                           port_sonar_inputs,
+                                           ddr_buzzer,port_buzzer,
+                                           cur_duty);
 
                 // Set  leds  on  from  left  to  right  continuously.
                 // Unless  there  is  an   object  on  the  pedestrian
                 // crossing, that is the  sonar system had detected an
                 // object(then only the red light is on)
                 if (!sonar_detected_object){
-                    state_current = auto_traffic_lights(cur_duty);
+                    auto_traffic_lights(cur_duty);
                 }
 
                 // if (condition) {
@@ -319,24 +354,31 @@ int main(void){
                 break;
             }
             case EMERGENCY_MODE: {
-            
+
+                usart_send_string("\ndbg: in EMERGENCY_MODE\n");
+                // LED green is enabled, all other LEDs are turned off.
+                OCR1A = 0;   // red (PB1 / OC1A)
+                OCR1B = cur_duty;   // green (PB2 / OC1B)
+                OCR2A = 0;   // yellow(PB3 / OC2A)
+
+                
+
                 break;
             }
             default:
                 break;
         }
 
-
-
         // Yield our process to be  nice to other processes running on
         // your  system/computer.   However,  remove if  makes  system
         // unresponsive.
         //_delay_ms(100);
-    }
     
-    return 0;
-}
+    } // end: switch
 
+    return 0;
+    
+} // end: main()
 
 
 
@@ -382,7 +424,7 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // following specification.
     //
     // When we have  linear mapping we know that distance  vs delay is
-    // linear over a feasible  distance.  Hence, the FEASIBLE DISTANCE
+    // linear over a feasible  distance.  Hence, the FEASIBLE DISCE
     // is Dmin to Dmax.  We  may get incorrect distance values outside
     // that region and meaningless buzzer delays.
     float Dmin = 10; // minimum feasible distance for ultrasonic sensor, mm.
@@ -477,7 +519,7 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // If system/circuit is off skip everything.
     if (!system_on_off_toggle){
         //continue;
-        return AUTO_MODE;
+        return;
     }
         
     echo_high_us_count = 0;
@@ -596,7 +638,7 @@ State traffic_light_sonar_system(volatile uint8_t *ddr_switch,
         //
         _delay_ms(60);
 
-        return AUTO_MODE;
+        return;
     }
     
     // Linearly map  the distance, from  the ultrasonic sensor  to the
@@ -1196,6 +1238,28 @@ void adc_init(void)
     // ==================================================
 
     // bitSet(ADCSRA, ADSC);   // Optional first trigger
+}
+
+
+
+void interrupt_init(void){
+
+    // Clear INT1 sense bits first
+    EICRA &= ~((1 << ISC11) | (1 << ISC10));
+
+    //// Rising edge on INT1
+    //EICRA |= (1 << ISC11) | (1 << ISC10);
+    
+    // INT1 ISR triggerd on falling edge, ie high to low, when the
+    // button is pressed.
+    EICRA |= (1 << ISC11);
+
+    // Clear any pending INT1 flag
+    EIFR |= (1 << INTF1);
+
+    // Enable INT1
+    EIMSK |= (1 << INT1);
+
 }
 
 

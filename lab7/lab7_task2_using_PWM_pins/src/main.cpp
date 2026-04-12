@@ -121,28 +121,17 @@ int main(void)
         // signal mark time.
         bitSet(ADCSRA, ADSC);
 
-        // Get ADC register value ready for plotting in vscode telepot:
-        // usart_flush();
-        // usart_send_string(">adc_cur:");
-        // // ADC register value 4 places including decimal point as an integer.
-        // usart_send_num(adc_cur, 4, 0);
-        // // Telepot value terminating character.
-        // usart_send_string("\n");
-        // _delay_ms(500);
-        
-        // _delay_ms(100);
+
         uint32_t time_on_cur = linear_mapping(adc_cur);
 
-        // Clamp for safety
-        // if (time_on_cur > PWM_PERIOD_MS)
-        //     time_on_cur = PWM_PERIOD_MS;
 
-        // Convert from "time on in one PWM period" to 8-bit duty value
-        //uint8_t duty = (uint8_t)((time_on_cur * 255UL) / PWM_PERIOD_MS);
-
+        // Convert from "time on in one PWM period" to 8-bit duty value.
         uint8_t duty = (uint8_t)((time_on_cur * 255UL) / PWM_PERIOD_MS);
-        //uint8_t duty = (uint32_t)(adc_cur - ADC_MIN) * 255 / (ADC_MAX - ADC_MIN);
-        // Hardware PWM output on PB1
+        
+
+        // Hardware PWM output on PB1.  // Deliver a PWM(Pulse Width
+        // Modulated) signal to the LED proportional to the current
+        // adc value.
         OCR1A = duty;
         // OCR1A = 10;
         // _delay_ms(1000);
@@ -156,14 +145,7 @@ int main(void)
         // usart_send_num(time_on_cur, 6, 0);
         // usart_send_byte('\n'); // CRLF or EOL
         // // _delay_ms(500);
-        // if (time_on_cur > 0 && time_on_cur < 2)
-        //     time_on_cur = 2;
-        // if (time_on_cur > PWM_PERIOD_MS)
-        //     time_on_cur = PWM_PERIOD_MS;
 
-
-        // // Deliver  a PWM(Pulse  Width  Modulated) signal  to the  LED
-        // // proportional to the current adc value.
 
         // // // Output signal mark.
         // bitSet(*port_led, pin_led);
