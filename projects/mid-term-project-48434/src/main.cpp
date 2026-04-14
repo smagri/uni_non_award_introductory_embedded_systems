@@ -86,7 +86,11 @@ void leds_pwm_enable(void);
 // #define ADC_MAX 935 // maximum feasible ADC count for photocell
 #define ADC_MIN 43 // minimum feasible ADC count for photocell
 #define ADC_MAX 1015 // maximum feasible ADC count for photocell
+
+// Have tuned circuit such that LEDs cycle/transition about every
+// second.
 #define LED_CHANGE_COUNT 20
+//#define LED_CHANGE_COUNT 5
 #define OBJECT_DETECTION_DISTANCE_MM 150
 
 
@@ -115,6 +119,8 @@ void leds_pwm_enable(void);
 
 // External Interrupt INT1, to trigger EMERGENCY_MODE
 #define pin_int1_interrupt PD3
+
+// Pin change Inerrupt to toggle auto mode on or off.
 #define pin_pcint10_interrupt PC2
 
 
@@ -161,8 +167,13 @@ volatile State state_current;
 ISR(USART_RX_vect){
 
     // We have recived the interrupt indicating the RX buffer contains
-    // data.  Remember first we need  to enable the interrupt for, data
-    // in RX buffer, with the RXCIE0 flag in UCSR0B.
+    // data.  Remember first we need to enable the interrupt for, data
+    // in RX  buffer, with the  RXCIE0 flag  in UCSR0B.
+
+    // We have used  this routine for the system to  set its debugging
+    // state by the user sending values to the USART.  That is setting
+    // the showing of ADC/LED brightness  values as a duty cycle value
+    // and for ultrasonic sensor/sonar distance measurments.
     
     char tmp = UDR0;
 
@@ -187,8 +198,10 @@ ISR(USART_RX_vect){
 
 ISR(ADC_vect){
 
-    // System ADC reading ISR routine
-        
+    // System ADC  value reading ISR  routine.  These ADC  values from
+    // the photo  sensing circuit  will be linearly  mapped to  a duty
+    // cycle for LED brightness control.
+    
     //usart_send_string("dbg: in ISR");
     
     // Triggers when interrupt conversion is complete.
@@ -198,7 +211,12 @@ ISR(ADC_vect){
 
 ISR(INT1_vect){
 
-    // System INT1 flag change to emergency mode.
+    // System External interrupt INT1 triggered  when a push button is
+    // pressed that is connected to a pin on the atmega328p MCU.  This
+    // will put the state machine into  emergency mode and turn on the
+    // green  LED indefinitely.  INT1 ISR  has been  configured to  be
+    // triggerd on  falling edge, ie high  to low, when the  button is
+    // pressed.
     
      // crude debouncing // TODO: implement proper debounceing code.
     _delay_ms(10);
@@ -212,12 +230,19 @@ ISR(INT1_vect){
 
 ISR(PCINT1_vect){
 
-    // PCINT1  for  PCINT10  to  enable manual  mode  and  toggle  the
-    // AUTO_MODE on and off.
+    // PCINT1 for PCINT10  ISR trigger to enable  state machine manual
+    // mode and thus toggle the auto mode on and off.  That is, toggle
+    // on and off  the 3 circuit LEDs with a  push button connected to
+    // PCINT10.  This is  the pin  change  interrupt on  PORTC of  the
+    // atmega328p MCU.
 
-    // PCINT1_vect fires  on any change  of PCIN10, not just  a button
-    // press.  This means press edge and release edge, bounce on press
-    // and release.
+    // PCINT1_vect fires  on any change  of PCIN10.  This means  it is
+    // called on the press edge and  release edge of pressing the push
+    // button connected  to PCINT10  atmega328p MCU. ISR  gets invoked
+    // twice but only  once it is at a low  voltage, on second trigger
+    // it  will  be in  a  high  state.   However,  here we  are  only
+    // actioning on, or using, when  the pressing down high-low of the
+    // button.
 
     // crude debouncing // TODO: implement proper debounceing code.
     _delay_ms(10);
@@ -349,17 +374,21 @@ int main(void){
         usart_debugging();
 
         // Read  photocell ADC  and  determine duty  cycle via  linear
-        // mapping, that is, adc values vs duty cucle.
+        // mapping, that is, adc values  vs duty cycle.  Photocell ADC
+        // values are  got from  the ISR ADC_vect.   We get  them here
+        // because they are required for all modes.
         cur_duty = get_duty_cycle();
 
         // Debugging
-        usart_send_string(">state:");
-        usart_send_num(state_current, 2, 0);
-        usart_send_string("\n");
-        _delay_ms(1);
+        // usart_send_string(">state:");
+        // usart_send_num(state_current, 2, 0);
+        // usart_send_string("\n");
+        // _delay_ms(1);
 
         
-        // Setup state machine mode transitions.
+        // Setup  state  machine  mode  transitions.   Which  mode  is
+        // triggered by  push buttons initiating ISR  which change the
+        // state.
         if (flag_emergency_mode_request){
             flag_emergency_mode_request = 0;
             state_current = EMERGENCY_MODE;
@@ -417,16 +446,16 @@ int main(void){
             }
             case MANUAL_MODE: {
 
-                usart_send_string("\ndbg: in MANUAL_MODE\n");
+                //usart_send_string("\ndbg: in MANUAL_MODE\n");
                 
                 // Toggling  A2  arduino  pin, connected  to  PC2  and
                 // equating to PCINT10 runs the PCINT1 ISR.
                 if (flag_auto_mode_toggle){
-                    usart_send_string("\ndbg: change mode ON AUTO_MODE\n");
+                    //usart_send_string("\ndbg: change mode ON AUTO_MODE\n");
                     state_current = AUTO_MODE;
                 }
                 else{
-                    usart_send_string("\ndbg: change mode OFF AUTO_MODE\n");
+                    //usart_send_string("\ndbg: change mode OFF AUTO_MODE\n");
                     // Turn off all LEDs
                     OCR1A = 0; // red (PB1 / OC1A)
                     OCR1B = 0; // green (PB2 / OC1B)
@@ -439,7 +468,7 @@ int main(void){
             case EMERGENCY_MODE: {
                 //leds_pwm_enable();
 
-                usart_send_string("\ndbg: in EMERGENCY_MODE\n");
+                //usart_send_string("\ndbg: in EMERGENCY_MODE\n");
                 // LED green is enabled, all other LEDs are turned off.
                 OCR1A = 0;          // red (PB1 / OC1A)
                 OCR1B = cur_duty;   // green (PB2 / OC1B)
@@ -477,6 +506,7 @@ float get_duty_cycle(void){
     bitSet(ADCSRA, ADSC);
 
 
+    // Linear Mapping of current ADC reading to duty cycle.
     float duty = linear_mapping((float)adc_cur,
                                 (float)ADC_MIN,
                                 (float)ADC_MAX,
@@ -594,15 +624,15 @@ void traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     static bool system_on_off_toggle = false;
 
     
-    // Debounce the switch.
-    debounce_switch(ddr_switch, port_switch, port_switch_inputs,
-                    ddr_sonar, port_sonar, &system_on_off_toggle);
+    // // Debounce the switch.
+    // debounce_switch(ddr_switch, port_switch, port_switch_inputs,
+    //                 ddr_sonar, port_sonar, &system_on_off_toggle);
 
-    // If system/circuit is off skip everything.
-    if (!system_on_off_toggle){
-        //continue;
-        return;
-    }
+    // // If system/circuit is off skip everything.
+    // if (!system_on_off_toggle){
+    //     //continue;
+    //     return;
+    // }
         
     echo_high_us_count = 0;
     timeout_counter = 30000;
@@ -985,7 +1015,7 @@ void auto_traffic_lights(float cur_duty){
     OCR1B = 0;   // green (PB2 / OC1B)
     OCR2A = 0;   // yellow(PB3 / OC2A)
 
-    // Turn on only the current LED using the current duty cycle
+    // Turn on only the current LED using the current duty cycle.
     switch (current_led)
     {
         case pin_led_red:
@@ -1006,7 +1036,9 @@ void auto_traffic_lights(float cur_duty){
             break;
     }
 
-    // Only change to the next LED after x calls
+    // Only change to the next LED  after x calls.  Have tuned circuit
+    // such that LEDs cycle/transition about every second.
+
     call_count++;
     if (call_count >= LED_CHANGE_COUNT){
     
@@ -1040,7 +1072,7 @@ void auto_traffic_lights(float cur_duty){
     
     if (usart_debugging_mode_led_brightness){
 
-        // Print out current ambient brightness
+        // Print out current ambient brightness.
 
         // Debugging
         // for (int i=0; i<10; i++){
