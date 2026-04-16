@@ -89,7 +89,7 @@ void leds_pwm_enable(void);
 
 // Have tuned circuit such that LEDs cycle/transition about every
 // second.
-#define LED_CHANGE_COUNT 20
+#define LED_CHANGE_COUNT 10
 //#define LED_CHANGE_COUNT 5
 #define OBJECT_DETECTION_DISTANCE_MM 150
 
@@ -245,6 +245,7 @@ ISR(PCINT1_vect){
     // button.
 
     // crude debouncing // TODO: implement proper debounceing code.
+    //_delay_ms(10);
     _delay_ms(10);
 
     // In the setupt code the setting the internal pull-up makes
@@ -399,10 +400,8 @@ int main(void){
             state_current = MANUAL_MODE;
         }
 
-        // --------------------------------------------
         // Handle PWM connection ONLY on state change
-        // --------------------------------------------
-        static State state_previous = AUTO_MODE;
+         static State state_previous = AUTO_MODE;
 
         if (state_current != state_previous){
 
@@ -474,6 +473,14 @@ int main(void){
                 OCR1B = cur_duty;   // green (PB2 / OC1B)
                 OCR2A = 0;          // yellow(PB3 / OC2A)
 
+                if (usart_debugging_mode_led_brightness){
+                    // LED off = 0 and LED brightest = 255.
+                    float cur_duty_percentage = (cur_duty / 255.0) * 100.0;
+                    usart_send_string(">duty(%):");
+                    usart_send_num(cur_duty_percentage, 3, 0);
+                    usart_send_string("\n");
+                }
+
                 break;
             }
             default:
@@ -502,7 +509,7 @@ float get_duty_cycle(void){
    
     // Single conversion mode is active, so conversion only occurs
     // once  everytime ADSC  is  set.  Get  the  current value  of
-    // signal mark time.
+    // the ADC via ISR 
     bitSet(ADCSRA, ADSC);
 
 
@@ -540,7 +547,7 @@ void traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // is Dmin to Dmax.  We  may get incorrect distance values outside
     // that region and meaningless buzzer delays.
     float Dmin = 10; // minimum feasible distance for ultrasonic sensor, mm.
-    float Dmax = 100;// maximum feasible distance for ultrasonic sensor, mm.
+    float Dmax = 200;// maximum feasible distance for ultrasonic sensor, mm.
 
     // WRKS:
     // I think you can't hear the buzzer below a 10ms on high pulse.
@@ -621,7 +628,7 @@ void traffic_light_sonar_system(volatile uint8_t *ddr_switch,
     // When  the switch  is toggled  our program  runs or  stops after
     // debounceing the  switch.  We start off  with the system/circuit
     // off.
-    static bool system_on_off_toggle = false;
+//    static bool system_on_off_toggle = false;
 
     
     // // Debounce the switch.
@@ -1217,130 +1224,61 @@ void set_user_required_usart_debugging_mode(int8_t user_choice){
 
 void adc_init(void)
 {
-    // ==================================================
-    // STEP 1: Select voltage reference and input channel
-    // ==================================================
-    //
+
     // ADMUX = ADC Multiplexer Selection Register
     //
-    // REFS1:0 → Reference Selection Bits
-    //   00 → AREF pin
-    //   01 → AVcc (5V on Arduino Uno)
-    //
-    // MUX3:0 → Input channel selection
-    //   0000 → ADC0 (A0)
-    //   0001 → ADC1 (A1)  <-- we want this
-    //
-    // Result:
-    // - Use AVcc (5V) as reference
-    // - Read from ADC1 (PC1 pin)
-    // ==================================================
-
-    ADMUX = 0;                // Clear all bits first (good practice)
-
-    bitSet(ADMUX, REFS0);     // REFS0 = 1 → Vref = AVcc (5V)
-
-    bitSet(ADMUX, MUX0);      // MUX0 = 1 → Select ADC1 (A1 / PC1)
-    // MUX3, MUX2, MUX1 remain 0
+    ADMUX = 0;              // Clear all bits first (good practice)
+    bitSet(ADMUX, REFS0);   // REFS0 = 1 => Vref = AVcc (5V)
+    bitSet(ADMUX, MUX0);    // MUX0 = 1 => Select ADC1 (A1/PC1) as input channel
 
 
-    // ==================================================
-    // STEP 2: Disable digital input buffer on ADC pin
-    // ==================================================
-    //
     // DIDR0 = Digital Input Disable Register
     //
-    // ADC1D = 1 → Disable digital input buffer on ADC1 pin
+    // ADC1D = 1, Disable digital input buffer on ADC1 pin
     //
-    // Why?
-    // - Reduces power consumption
-    // - Reduces electrical noise on the analog pin
-    // - Improves ADC accuracy
-    // ==================================================
-
+    // We do this to reduce power consumption; electrical noise on the
+    // analog pin; and improves ADC accuracy.
     bitSet(DIDR0, ADC1D);
 
 
-    // ==================================================
-    // STEP 3: Configure ADC control register
-    // ==================================================
-    //
     // ADCSRA = ADC Control and Status Register A
     //
-    // ADPS2:0 → Prescaler bits
-    //   111 → divide clock by 128
-    //
-    // ADC clock = 16 MHz / 128 = 125 kHz
-    //
-    // Why 125 kHz?
-    // - Recommended ADC operating range: 50–200 kHz
-    // - Gives stable and accurate readings
-    // ==================================================
-
     ADCSRA = 0;   // Clear register first
 
+    // We need to decrease the CPU clock for the ADC hardware to work
+    // properly.  We use a prescaler to do this.  Prescaler set to
+    // 128.
+    
+    // ADC clock = 16  MHz / 128 = 125 kHz.   The recommended range of
+    // ADC  operation  is  50-200Hz,   to  give  stable  and  accurate
+    // readings.
     bitSet(ADCSRA, ADPS2);
     bitSet(ADCSRA, ADPS1);
-    bitSet(ADCSRA, ADPS0);    // Prescaler = 128
+    bitSet(ADCSRA, ADPS0);
 
 
-    // ==================================================
-    // STEP 4: Enable ADC interrupt
-    // ==================================================
+    // ADIE = ADC Interrupt Enable.
     //
-    // ADIE = ADC Interrupt Enable
-    //
-    // When conversion completes:
-    // - ADC interrupt fires
-    // - ISR(ADC_vect) runs automatically
-    //
-    // This allows NON-BLOCKING ADC reading
-    // ==================================================
-
+    // When   conversion  is   complete  the   ISR(ADC_vect)  executes
+    // automatically.  It allows non-blocking ADC reading.
     bitSet(ADCSRA, ADIE);
 
 
-    // ==================================================
-    // STEP 5: Enable the ADC module
-    // ==================================================
-    //
     // ADEN = ADC Enable
-    //
-    // Must be set AFTER configuration is complete
-    // ==================================================
-
     bitSet(ADCSRA, ADEN);
 
-
-    // ==================================================
-    // STEP 6 (optional): Start first conversion
-    // ==================================================
-    //
-    // ADSC = ADC Start Conversion
-    //
-    // When set:
-    // - ADC begins sampling
-    // - Hardware clears ADSC when done
-    //
-    // In your program:
-    // You can either:
-    //   - start here, OR
-    //   - start in main loop (recommended)
-    // ==================================================
-
-    // bitSet(ADCSRA, ADSC);   // Optional first trigger
 }
 
 
 
 void interrupt_init(void){
 
-    // INIT1 configuration: ////////////////////////////////////////////////////
-    
+    // INIT1 external interrupt configuration:
+    //
     // Clear INT1 sense bits first
     EICRA &= ~((1 << ISC11) | (1 << ISC10));
 
-    //// Rising edge on INT1
+    // Triggered on Rising edge on INT1
     //EICRA |= (1 << ISC11) | (1 << ISC10);
     
     // INT1 ISR triggerd on falling edge, ie high to low, when the
@@ -1350,22 +1288,20 @@ void interrupt_init(void){
     // Clear any pending INT1 flag
     EIFR |= (1 << INTF1);
 
-    // Enable INT1
+    // Enable external interrupt INT1
     EIMSK |= (1 << INT1);
 
 
-
-    // PCINT10 configuration with PCIE1 ////////////////////////////////////////
-
-    // Port C's PCINT10 pin used so enable so PCIE1 is the pin change interrupt.
+    // Port C's PCINT10  MCU pin used so enable  PCIE1_vect pin change
+    // interrupt.   Remember there  is only  one pin  change interrupt
+    // allowed per port  on the atmega328p MCU.  Also  it will trigger
+    // on the falling high->low and  rising low->high of a push button
+    // press.
+    //
     PCICR |= (1 << PCIE1); // Set Pin Change Inerrupt Control Register.
 
     PCMSK1 |= (1 << PCINT10); //Set Pin Change Mask Register 1
-
-    
-
 }
-
 
 
 
@@ -1376,156 +1312,83 @@ void pwm_init_leds(void)
     // PWM signal exists. OCR registers  do nothing.  LEDs wont dim or
     // brighten depending on duty cycle.
     
-    // --------------------------------------------------
-    // STEP 1: Configure LED pins as OUTPUTS
-    // --------------------------------------------------
+
+    // Configure LED pins as OUTPUTS:
     //
-    // PB1 = OC1A → Timer1 channel A → Red LED
-    // PB2 = OC1B → Timer1 channel B → Green LED
-    // PB3 = OC2A → Timer2 channel A → Yellow LED
+    // PB1 = OC1A => Timer1 channel A => Red LED
+    // PB2 = OC1B => Timer1 channel B => Green LED
+    // PB3 = OC2A => Timer2 channel A => Yellow LED
     //
     // Setting bits in DDRB makes these pins outputs.
-    // --------------------------------------------------
+    // 
     DDRB |= (1 << PB1) | (1 << PB2) | (1 << PB3);
 
 
-    // ==================================================
-    // TIMER1 SETUP (controls PB1 and PB2)
-    // ==================================================
+    // TIMER1 configuration, operates for controlling OC1A and OC1B:
     //
-    // We configure Timer1 to:
-    // - Use Fast PWM (8-bit)
-    // - Use non-inverting mode
-    // - Use a prescaler of 64
-    //
-    // Resulting PWM frequency:
-    //   f_PWM ≈ 16MHz / (64 * 256) ≈ 976 Hz
-    //
-    // This is fast enough for LED brightness control
-    // (no visible flicker).
-    // ==================================================
-
     // Clear control registers before configuration
     TCCR1A = 0;
     TCCR1B = 0;
 
 
-    // --------------------------------------------------
-    // Enable PWM output on OC1A and OC1B
-    // --------------------------------------------------
+    // Enable PWM output on OC1A and OC1B:
     //
-    // COM1A1 = 1, COM1A0 = 0 → Non-inverting PWM (OC1A)
-    // COM1B1 = 1, COM1B0 = 0 → Non-inverting PWM (OC1B)
-    //
-    // Non-inverting mode means:
-    //   OCR = 0   → LED OFF (almost always LOW)
-    //   OCR = 255 → LED fully ON (almost always HIGH)
-    // --------------------------------------------------
+    // Non-inverting PWM =>
+    // OCR=0 LED OFF(some residual current remains though)
+    // OCR=255 LED FULLY On
     bitSet(TCCR1A, COM1A1);   // Enable PWM on PB1 (OC1A)
     bitSet(TCCR1A, COM1B1);   // Enable PWM on PB2 (OC1B)
 
 
-    // --------------------------------------------------
-    // Select Fast PWM 8-bit mode
-    // --------------------------------------------------
-    //
-    // WGM13:0 = 0b0101
-    //
-    // WGM10 = 1 (in TCCR1A)
-    // WGM12 = 1 (in TCCR1B)
-    //
-    // This gives:
-    // - 8-bit resolution (0–255)
-    // - Fast PWM operation
-    // --------------------------------------------------
+    // This gives 8-bit resolution (0–255) and Fast PWM operation.
     bitSet(TCCR1A, WGM10);
     bitSet(TCCR1B, WGM12);
 
 
-    // --------------------------------------------------
-    // Set prescaler = 64
-    // --------------------------------------------------
-    //
-    // CS12:0 = 0b011
+    // Set prescaler = 64.  That  is the hardware clock operating mode
+    // for stability.
     //
     // Timer clock = 16 MHz / 64 = 250 kHz
-    // --------------------------------------------------
+    //
     bitSet(TCCR1B, CS11);
     bitSet(TCCR1B, CS10);
 
 
-    // --------------------------------------------------
     // Initialise duty cycles (LEDs OFF)
-    // --------------------------------------------------
     //
     // OCR1A controls PB1 (red LED)
     // OCR1B controls PB2 (green LED)
     //
-    // Setting to 0 gives minimum duty cycle.
-    // --------------------------------------------------
+    // Setting to 0 gives minimum duty cycle.  Some residual signal is
+    // still there though.
+    //
     OCR1A = 0;
     OCR1B = 0;
 
 
-
-    // ==================================================
-    // TIMER2 SETUP (controls PB3)
-    // ==================================================
+    // TIMER2 configuration,  operates for controlling OC2A.   This is
+    // the yello LED on PB3.
     //
-    // Timer2 is used for the yellow LED (PB3 / OC2A)
-    //
-    // Configuration:
-    // - Fast PWM mode
-    // - Non-inverting output
-    // - Prescaler = 64
-    //
-    // PWM frequency is similar to Timer1 (~976 Hz)
-    // ==================================================
-
     // Clear control registers
     TCCR2A = 0;
     TCCR2B = 0;
 
-
-    // --------------------------------------------------
-    // Enable PWM output on OC2A (PB3)
-    // --------------------------------------------------
-    //
-    // COM2A1 = 1, COM2A0 = 0 → Non-inverting PWM
-    // --------------------------------------------------
+    // Enable Non-inverting PWM
     bitSet(TCCR2A, COM2A1);
 
-
-    // --------------------------------------------------
     // Select Fast PWM mode
-    // --------------------------------------------------
-    //
-    // WGM22:0 = 0b011
-    //
-    // WGM21 = 1
-    // WGM20 = 1
-    // --------------------------------------------------
     bitSet(TCCR2A, WGM21);
     bitSet(TCCR2A, WGM20);
 
-
-    // --------------------------------------------------
-    // Set prescaler = 64
-    // --------------------------------------------------
-    //
-    // CS22:0 = 0b100
+    // Set prescaler = 64.
     //
     // Timer clock = 16 MHz / 64 = 250 kHz
-    // --------------------------------------------------
     bitSet(TCCR2B, CS22);
 
 
-    // --------------------------------------------------
     // Initialise duty cycle (LED OFF)
-    // --------------------------------------------------
     //
     // OCR2A controls PB3 (yellow LED)
-    // --------------------------------------------------
     OCR2A = 0;
 }
 
@@ -1539,43 +1402,34 @@ void leds_off_hard(void)
     // Fast PWM  can still  leave a  tiny pulse,  hence faint  glow of
     // LEDs.
     
-    // --------------------------------------------------
-    // STEP 1: Set PWM duty cycles to zero
-    // --------------------------------------------------
+    
+
+    // In Fast PWM mode,  OCR = 0 can still leave a  tiny pulse on the
+    // output pin. That can make the LED glow faintly.  So setting OCR
+    // = 0 alone is not enough for a guaranteed OFF.
     //
-    // In Fast PWM mode, OCR = 0 can still leave a tiny pulse
-    // on the output pin. That can make the LED glow faintly.
-    // So setting OCR = 0 alone is not enough for a guaranteed OFF.
-    // --------------------------------------------------
     OCR1A = 0;   // PB1 / OC1A / red
     OCR1B = 0;   // PB2 / OC1B / green
     OCR2A = 0;   // PB3 / OC2A / yellow
 
 
-    // --------------------------------------------------
-    // STEP 2: Disconnect PWM hardware from LED pins
-    // --------------------------------------------------
+    //  Disconnect PWM hardware from LED pins
     //
     // While the COM bits are set, the timer peripheral owns
     // the output pins. Clearing those bits returns the pins
     // to normal GPIO control.
-    // --------------------------------------------------
 
-    // Disconnect Timer1 PWM from OC1A and OC1B
+    // Disconnect TIMER1 PWM from OC1A and OC1B
     TCCR1A &= ~((1 << COM1A1) | (1 << COM1A0) |
                 (1 << COM1B1) | (1 << COM1B0));
 
-    // Disconnect Timer2 PWM from OC2A
+    // Disconnect TIMER2 PWM from OC2A
     TCCR2A &= ~((1 << COM2A1) | (1 << COM2A0));
 
 
-    // --------------------------------------------------
-    // STEP 3: Force the LED pins LOW
-    // --------------------------------------------------
-    //
-    // Now that PWM is disconnected, PORTB writes control the pins.
+    // Now that  PWM is disconnected,  PORTB writes control  the pins.
     // Driving them LOW turns the LEDs fully off.
-    // --------------------------------------------------
+    //
     PORTB &= ~((1 << PB1) | (1 << PB2) | (1 << PB3));
 }
 
@@ -1585,29 +1439,19 @@ void leds_pwm_enable(void)
 {
 
     // Connect PWM timer output to pins.  OOCR1A, OCR1B, OCR2A control
-    // brightness PORTB writes are ignored.
+    // brightness, PORTB writes are ignored.
     
-    // --------------------------------------------------
-    // STEP 1: Reconnect Timer1 PWM outputs
-    // --------------------------------------------------
+
+    // Reconnect TIMER1 PWM outputs for OC1A, OC1B ie PB1 and PB2.
     //
     // Non-inverting PWM:
-    //   OCR = 0   -> output low almost all the time
-    //   OCR = 255 -> output high almost all the time
-    //
-    // OC1A -> PB1
-    // OC1B -> PB2
-    // --------------------------------------------------
+    //   OCR = 0   => output low almost all the time
+    //   OCR = 255 => output high almost all the time
     TCCR1A |= (1 << COM1A1) | (1 << COM1B1);
     TCCR1A &= ~((1 << COM1A0) | (1 << COM1B0));
 
 
-    // --------------------------------------------------
-    // STEP 2: Reconnect Timer2 PWM output
-    // --------------------------------------------------
-    //
-    // OC2A -> PB3
-    // --------------------------------------------------
+    // Reconnect TIMER2 PWM output for OC2A, PB3.
     TCCR2A |= (1 << COM2A1);
     TCCR2A &= ~(1 << COM2A0);
 }
