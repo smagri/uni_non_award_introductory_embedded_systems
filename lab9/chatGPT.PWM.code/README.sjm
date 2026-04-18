@@ -1,0 +1,30 @@
+I17apr2026
+
+I gave chatGPT only  the code page of W8 lecture  nodes.  And added my
+usart helper functions.
+
+'W8. Timer Counter 0pg41code.pdf'
+
+ChatGPT  converted it  to  proper Timer/Counter0  FAST  PWM, MAX  Mode
+correctly, it  builds, runs  properly.  Proper  running is  bright LED
+when close to ultrasonic sensor and  dim when far away from ultrasonic
+sensor.   This also  matches my  requiremt for  my last  4 numbers  of
+student id number  being odd.
+
+However, when I told it to convert it  to Fast PWM Top Mode of TC0 all
+the verisons didn't work.  However, when I used the Thinking effort to
+EXTENDED  and Model  Thinking5.4  it  came up  with  a proper  working
+version, but it was really really  slow at generating the code.  Where
+bright LED  at close  range and dim  when you move  far away  from the
+sensor.   It is  in  lab_task_FASTPWMTopModeofTC0.extended.  That  is:
+smagri@texas:~/uni/subj/ies/src/lab9/chatGPT.PWM.code/lab_task_FASTPWMTopModeofTC0.extended$
+
+
+
+However, gpai came up with a solution that worked, quickly.  That is:
+smagri@texas:~/uni/subj/ies/src/lab9/gpai.PWM.code/lab9_task_FASTPWMTopModeofTC0$ 
+
+
+However, on further  testing the gpai and extended  version of chatGPT
+behave a  little differently, not sure  which one is the  best to use.
+That is, which gives the best high-low brightness of LED result.

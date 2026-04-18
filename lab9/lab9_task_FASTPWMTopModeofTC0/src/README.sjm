@@ -1,0 +1,83 @@
+I have  reviewed your code. You  are using Timer/Counter0 (TC0)  on an
+AVR (likely ATmega328P) in Mode 7 (Fast PWM with TOP = OCR0A).
+
+Key observations from your implementation:
+PWM Configuration:
+
+By  setting  WGM02:0  =  0b111,   you've  defined  OCR0A  as  the  TOP
+value. This allows  you to vary the frequency/period of  the PWM.  You
+are using OC0B  (PD5) for the output, with OCR0B  controlling the duty
+cycle.  OCR0A is set to MY_TOP (255), and OCR0B is mapped based on the
+sonar distance.  Timing & Sonar:
+
+You are calculating  Tov (Timer Overflow period)  dynamically based on
+MY_TOP.   The sonar()  function uses  the numOV  (overflow count)  and
+TCNT0  to calculate  the high-pulse  duration  of the  echo pin.   The
+my_delay_us function is also tied to the timer's overflow logic, which
+is now dependent on OCR0A.  Hardware Pins:
+
+Trigger: PD4
+Echo: PD7
+PWM Output: PD5 (OC0B)
+What are your questions regarding this setup?
+
+Summary: /////////////////////////////////////////////////////////////////////
+
+OCR0A = TOP - varies the frequency/period of the PWM
+OCR0B = duty cycle
+
+The  sonar  function  linearly  maps sonar  distance(x-axis)  to  duty
+cycle(y-axis).   The  linear mapping  function  has  a negative  slope
+though.   As  y1=MY_TOP-1 and  y2  =  10,  thus  y2-y1 =  -ve  number.
+Remember slope = (y2 - y1) / (x2 - x1).
+ 
+Summary: /////////////////////////////////////////////////////////////////////
+
+
+What does this line mean:
+    Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
+
+In simple terms,  this line calculates how many  microseconds it takes
+for the timer to "loop" once.
+
+Think  of the  timer like  a stopwatch  that automatically  resets and
+starts over once it hits a certain number.
+
+MY_TOP + 1: This  is the total number of "ticks" in  one full loop. If
+your limit is 255, it actually takes 256 ticks to go from 0 back to 0.
+
+/  clock_tc0: This  converts those  "ticks" into  seconds. Since  your
+clock is  very fast (16 million  ticks per second), this  results in a
+tiny fraction of a second.  *  1.0e6: This converts those seconds into
+microseconds (us) μs) to make the number easier to work with.
+
+The Result:
+If MY_TOP is 255 and your clock is 16MHz, Tov becomes 16.
+
+Why  do  you need  this?   Because  your  sonar measures  distance  by
+counting how many times the timer  "loops" while waiting for the sound
+to  bounce back.  If the  timer loops  10 times,  the code  knows that
+10×16μs=160μs have passed.  Without this  line, the code wouldn't know
+how much "time" each loop actually represents.
+
+SUMMARY: ////////////////////////////////////////////////////////////////
+    Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
+Calculates how many microseconds it take for the timer to loop once.
+
+MY_TOP+1 is the total number of ticks in one full loop.  Ticks are
+periods of the 16MHz clock.
+
+clock_tc0 * 1.0e6; Converts ticks to seconds(clock_tc0) then us.
+
+Tov is  PWM signal period, it  is the time  it takes for the  timer to
+count  from  0  to MY_TOP.   While  a  "tick"  is  the period  of  the
+high-speed clock driving the timer.
+
+It takes 256  Ticks(Periods of the 16MHz clock) to  create 1 Period of
+the PWM signal.
+
+T PWM = Ticks per Cycle×TClock
+​𝑇 PWM= (255+1)×62.5 ns=16μs
+SUMMARY: ////////////////////////////////////////////////////////////////
+
+SUMMARY: ////////////////////////////////////////////////////////////////
