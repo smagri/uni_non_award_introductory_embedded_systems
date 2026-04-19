@@ -45,7 +45,7 @@ void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
 
 
-float fun_map(float x, float x1, float x2, float y1, float y2);
+float linear_mapping(float x, float x1, float x2, float y1, float y2);
 float sonar(void);
 void my_delay_us(unsigned long x);
 void config_tc0(void);
@@ -104,7 +104,7 @@ int main(void)
         // distance increases  the duty  cycle decreaes and  hence the
         // LED attached to OCR0B gets dimmer with increasing distance.
         //
-        OCR0B = (uint8_t)fun_map(D, 10, 300, MY_TOP - 1, 10);
+        OCR0B = (uint8_t)linear_mapping(D, 10, 300, MY_TOP - 1, 10);
          
         usart_send_num(OCR0B, 3, 0);
         usart_send_byte('\n');
@@ -159,7 +159,7 @@ void my_delay_us(unsigned long x)
 
 
 
-float fun_map(float x, float x1, float x2, float y1, float y2)
+float linear_mapping(float x, float x1, float x2, float y1, float y2)
 {
     // 1. Clamp the input to the lower bound
     if (x <= x1) return y1;

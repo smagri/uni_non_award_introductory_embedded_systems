@@ -222,6 +222,8 @@ float sonar(void)
 void my_delay_us(unsigned long x)
 {
     unsigned long numOV_max = (float)x / Tov;
+
+    // clock_tc0 = F_CPU/prescaler, time taken by one tick
     unsigned char tcnt0_max =
         ((float)x - numOV_max * Tov) / 1.0e6 * clock_tc0;
 
