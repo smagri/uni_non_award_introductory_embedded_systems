@@ -8,7 +8,8 @@
 //
 // Compile as AVR C/C++ (PlatformIO / avr-gcc style)
 
-// Fast PWM MAX is used for precise delay, time-keeping, and PWM generation
+// Fast PWM MAX is used for precise delay, time-keeping, and PWM
+// generation.
 //
 // Timer0 (TC0) is doing three jobs at once:
 // PWM generation (LED brightness via OCR0A)
@@ -80,12 +81,8 @@ void usart_send_byte(unsigned char data);
 void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
 
-// void usart_init(float baud);
-// void usart_send_byte(unsigned char data);
-// void usart_send_string(char *pstr);
-// void usart_send_num(float num, char num_int, char num_decimal);
 
-float fun_map(float x, float x1, float x2, float y1, float y2);
+float linear_mapping(float x, float x1, float x2, float y1, float y2);
 float sonar(void);
 void my_delay_us(unsigned long x);
 void config_tc0(void);
@@ -95,16 +92,65 @@ ISR(TIMER0_OVF_vect)
     numOV++;
 }
 
-void config_tc0()
-{
+void config_tc0(){
+    // Configure TC0(Timer Clock 0)for Fast PWM MAX output on OCROA.
+    
+
+    // Effective hardware required prescaled clock frequency.  That is
+    // the  clock speed  which the  hardware,  TC0 in  this case,  can
+    // handle to operate stably.
     clock_tc0 = 16.0e6 / prescaler;
 
-    // Fast PWM, TOP = 0xFF, non-inverting on OC0A
-    TCCR0A |= 0b10000011;   // COM0A1=1, WGM01=1, WGM00=1
-    OCR0A = 10;
+    // Mode3:
+    // Fast PWM MAX, where TOP = 0xFF=MAX
+    // Non-inverting on OCOA
+    TCCR0A |= 0b10000011; // COM0A1=1, WGM01=1, WGM00=1
+    OCR0A = 10; // Start dim LED brightness/low duty cycle
 
-    Tov = 16.0f; // overflow time in us for Timer0 @ 16 MHz, prescaler 1
+    // Overflow time  in us for Timer0  @16 MHz, prescaler 1.   It is
+    // the time taken for Timer0 to count from 0 to its top value and
+    // the overflow back to 0.
+    //
+    // So for  F_CPU=16Mz, prescaler1, Timer0  is 8bit, so  counts 256
+    // ticks, ie TOP+1 ticks:
+    //
+    // Tov = 256/16x106 seconds = 16x10^6 = 16us
+    //
+    // Expanded it is:
+    // Tov = ((float)255 + 1.0f) / clock_tc0 * 1.0e6f;
+    //
+    // Where clock_tc0=F_CPU/prescaler, in seconds. Thus 1/clock_tc0 = Period T
+    // Where tick_time = 1/clock_tc0. = T the period or time taken foreach tick.
+    //
+    // It is important as later it is used to measure longer times by
+    // counting how many overflows happened. As in:
+    // float tElapse = (numOV) * Tov + ((float)(tmp + 1) / clock_tc0) * 1.0e6;
+    // - Where numOV * Tov = time from full overflows
+    // - Where ((tmp+1)/ clock_tc0 * 1.0e6) is the leftover partial timer time.
+    // * remember divide by clock_tc0 == multiply by T
+    //   where T = 1/F_CPU/prescaler=1/clock_tc0.
+    //
+    // Simply put:
+    float ticks_per_overflow = 256.0f;          // counts 0..255
+    float tick_time_us = (1.0f / clock_tc0) * 1.0e6f; // (T = 1/F)
+    Tov = ticks_per_overflow * tick_time_us;    // overflow time in us
+    // Resulting in this case in Tov = 16.0f;
 
+    // Velocity of sound = 343.0f m/s,
+    // Tov=16.0f us.
+    // Total metres of sound travel path = 12m.
+    // Remember: Velocity=Distance/Time, time = distance/velocity.
+    //
+    // ie total time possible(total allowed echo time)=
+    //      (max distance possible to object*2)
+    //      / speed of sound(as we have ultrasonic sensor)
+    //
+    //      / (total time for one overflow of the counter)
+    // = max number of full overflows for sonar
+    //
+    // So this gives us our timout  for waiting for the echo signal to
+    // stay high.  Used in sonare() fn.
+    //
     numOV_max_sonar = 12.0 / vel_sound / Tov * 1.0e6;
 }
 
@@ -112,23 +158,30 @@ int main(void)
 {
     usart_init(9600);
 
-    bitSet(DDRD, pin_oc0a);          // PD6 / OC0A as output
-    bitSet(*ddr_sonar, pin_trigger); // trigger output
-    bitClear(*ddr_sonar, pin_echo);  // echo input
+    bitSet(DDRD, pin_oc0a);          // PD6 / OC0A as output(PWM output)
+    bitSet(*ddr_sonar, pin_trigger); // Ultrasonic sensor trigger signal output
+    bitClear(*ddr_sonar, pin_echo);  // Ultrasonic sensor echo signal input
 
-    config_tc0();
-    start_tc0;
-    sei();
+    config_tc0(); // configure TC0
+    start_tc0; // ****** start TC0 ******
+    sei(); // enable global interrupt switch
 
-    while (1)
-    {
-        float D = sonar();      // distance in mm
+    while (1){
 
+        // Measure  current  distance   to  obstacle  from  Ultrasonic
+        // Sensor.
+        float D = sonar(); // distance in mm
+
+        // dbg: Print out distance values to serial monitor.
         usart_send_num(D, 3, 3);
         usart_send_byte(';');
 
-        OCR0A = (uint8_t)fun_map(D, 10, 300, MAX_CLK - 1, 10);
+        // Linearly  map sonar  distance  to duty  cycle.  Duty  cycle
+        // output  to  OCROA.  That  is PWM  signal  output  to  OCR0A
+        // atmega328p pin.
+        OCR0A = (uint8_t)linear_mapping(D, 10, 300, MAX_CLK - 1, 10);
 
+        // dbg: Print out OCROA duty cycle to serial monitor.
         usart_send_num(OCR0A, 3, 0);
         usart_send_byte('\n');
 
@@ -189,10 +242,11 @@ void my_delay_us(unsigned long x)
         ;
 }
 
-float fun_map(float x, float x1, float x2, float y1, float y2)
+float linear_mapping(float x, float x1, float x2, float y1, float y2)
 {
     if (x <= x1) return y1;
     if (x >= x2) return y2;
+
     return y1 + (x - x1) * (y2 - y1) / (x2 - x1);
 }
 

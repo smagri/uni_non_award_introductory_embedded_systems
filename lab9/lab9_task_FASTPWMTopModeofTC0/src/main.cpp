@@ -86,6 +86,11 @@ int main(void)
     start_tc0;
     sei();
 
+    // uint8_t MY_TOP = linear_mapping(7723. 0, 9999, 255, 100);
+    // usart_send_string("MY_TOP=");
+    // usart_send_num(MY_TOP, 4, 0);
+    // usart_send_byte('\n');
+
     while (1)
     {
         float D = sonar(); 
@@ -93,7 +98,12 @@ int main(void)
         usart_send_num(D, 3, 3);
         usart_send_byte(';');
 
-        // Map distance to OCR0B (Duty Cycle) instead of OCR0A
+        // Map distance to OCR0B (Duty Cycle) instead of OCR0A.
+        //
+        // Note: y2<y1(100-255) => -ve slope  for mapping, which => as
+        // distance increases  the duty  cycle decreaes and  hence the
+        // LED attached to OCR0B gets dimmer with increasing distance.
+        //
         OCR0B = (uint8_t)fun_map(D, 10, 300, MY_TOP - 1, 10);
          
         usart_send_num(OCR0B, 3, 0);
