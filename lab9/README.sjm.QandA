@@ -31,29 +31,6 @@ cycle(y-axis).   The  linear mapping  function  has  a negative  slope
 though.   As  y1=MY_TOP-1 and  y2  =  10,  thus  y2-y1 =  -ve  number.
 Remember slope = (y2 - y1) / (x2 - x1).
  
-Summary: /////////////////////////////////////////////////////////////////////
-
-
-What does this line mean:
-    Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
-
-In simple terms,  this line calculates how many  microseconds it takes
-for the timer to "loop" once.
-
-Think  of the  timer like  a stopwatch  that automatically  resets and
-starts over once it hits a certain number.
-
-MY_TOP + 1: This  is the total number of "ticks" in  one full loop. If
-your limit is 255, it actually takes 256 ticks to go from 0 back to 0.
-
-/  clock_tc0: This  converts those  "ticks" into  seconds. Since  your
-clock is  very fast (16 million  ticks per second), this  results in a
-tiny fraction of a second.  *  1.0e6: This converts those seconds into
-microseconds (us) μs) to make the number easier to work with.
-
-The Result:
-If MY_TOP is 255 and your clock is 16MHz, Tov becomes 16.
-
 Why  do  you need  this?   Because  your  sonar measures  distance  by
 counting how many times the timer  "loops" while waiting for the sound
 to  bounce back.  If the  timer loops  10 times,  the code  knows that
@@ -62,23 +39,29 @@ how much "time" each loop actually represents.
 
 SUMMARY: ////////////////////////////////////////////////////////////////
     Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
-Calculates how many microseconds it take for the timer to loop once.
 
-MY_TOP+1 is the total number of ticks in one full loop.  Ticks are
-periods of the 16MHz clock.
+Simply, it calculates how many microseconds  it takes for the timer to
+loop once.
 
-clock_tc0 * 1.0e6; Converts ticks to seconds(clock_tc0) then us.
+MY_TOP is the number  of clock ticks for the counter TC0  to go from 0
+to MY_TOP and back to 0 again.
 
-Tov is  PWM signal period, it  is the time  it takes for the  timer to
-count  from  0  to MY_TOP.   While  a  "tick"  is  the period  of  the
-high-speed clock driving the timer.
+Thus, (total_number_of_ticks  * T(period of  each tick)),
+is the  time it take  for the  counter to do  one cycle, thus  go from
+0ticks to MY_TOPticks.
 
-It takes 256  Ticks(Periods of the 16MHz clock) to  create 1 Period of
-the PWM signal.
+Remember that T=1/F and F=F_CPU/prescalor, in the program clock_tc0 is
+defined  as  clock_tc0=F_CPU/prescaler,  thus  the  equation  for  Tov
+becomes Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6 us.
 
-T PWM = Ticks per Cycle×TClock
-​𝑇 PWM= (255+1)×62.5 ns=16μs
-SUMMARY: ////////////////////////////////////////////////////////////////
+Also, looking  at the graph  of how PWM's  are generated, you  can see
+that Tov is also the period of the PWM signal at OC0B for Fast PWM Top
+Mode.
 
+Aside,  note that  at  compare  match means,  0CF0B  flag  is set  and
+overflow interrupt occurs, as well as clearing OCB0.
+
+The Result:
+If MY_TOP is 255 and your clock is 16MHz, Tov becomes 16.
 SUMMARY: ////////////////////////////////////////////////////////////////
 

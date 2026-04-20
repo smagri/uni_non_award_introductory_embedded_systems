@@ -316,9 +316,7 @@ float linear_mapping(float x, float x1, float x2, float y1, float y2)
 
 
 
-///////////////////////////////////////////////////////////////////////////////
-//                           USART helper functions                          //
-///////////////////////////////////////////////////////////////////////////////
+// ... [Keep your USART helper functions exactly the same as provided] ...
 void usart_init(float baud_rate){
 
 
