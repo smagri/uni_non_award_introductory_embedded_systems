@@ -69,11 +69,16 @@ void config_tc0()
     TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);
     TCCR0B = (1 << WGM02); // Prescaler is 0 right now, started by start_tc0 macro
 
-    OCR0A = MY_TOP;  // This sets the Period/Frequency
-    OCR0B = 10;      // This sets the Duty Cycle (Brightness)
+    myTOP = (uint8_t)linear_mapping(7723.0, 0.0, 9999.0, 100, 255);
+    usart_send_string("myTOP=");
+    usart_send_num(myTOP, 4, 0);
+    usart_send_string("\n");
+
+    OCR0A = myTOP;  // This sets the Period/Frequency
+    OCR0B = 10;     // This sets the Duty Cycle (Brightness)
 
     // Tov = (TOP + 1) / clock_tc0. With TOP=255 and 16MHz, Tov = 16us
-    Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
+    Tov = ((float)myTOP + 1.0f) / clock_tc0 * 1.0e6;
 
     numOV_max_sonar = 12.0 / vel_sound / Tov * 1.0e6;
 }
@@ -98,7 +103,7 @@ int main(void)
         usart_send_byte(';');
 
         // Map distance to OCR0B (Duty Cycle) instead of OCR0A
-        OCR0B = (uint8_t)fun_map(D, 10, 300, MY_TOP - 1, 10);
+        OCR0B = (uint8_t)fun_map(D, 10, 300, myTOP - 1, 10);
 
         usart_send_num(OCR0B, 3, 0);
         usart_send_byte('\n');
