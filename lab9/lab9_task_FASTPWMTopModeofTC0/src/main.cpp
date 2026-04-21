@@ -10,6 +10,7 @@
 #define start_tc0         (TCCR0B |= 0b001)   // prescaler = 1
 #define stop_tc0          (TCCR0B &= ~0b111)
 
+// Timer/Counter overflow interrupt enable and disable
 #define enable_tc0_int    (bitSet(TIMSK0, TOIE0))
 #define disable_tc0_int   (bitClear(TIMSK0, TOIE0))
 
@@ -18,15 +19,21 @@
 #define pin_oc0b    PD5  // Changed from PD6 because OCR0A is now TOP
 
 #define prescaler 1
-// We now define TOP manually. 255 replicates previous behavior.
-//#define MY_TOP    255
-#define MY_TOP 219
+
+// Testing TOP  values.  Initially anything  less than 245  would hang
+// the program in  my_delay_us().  This was due to  a counter overflow
+// fov numOV in the routine.
+//
+//#define MY_TOP 219
 //#define MY_TOP 245
 //#define MY_TOP    199 
 //#define MY_TOP 240
 
 
+// Total _time_ taken for the counter to count from 0->TOP-1->0 again.
 float Tov;
+
+// T=1/F, the perioud of each clock tick.  Where is F/prescaler.
 float clock_tc0;
 
 // Kai's original code, causes my_delay_us() to hang as numOV overflows:
@@ -35,17 +42,25 @@ float clock_tc0;
 //
 // Avoids counter overflow in my_delay_us() for 1s delay.
 volatile uint32_t  numOV = 0;
+
+// Max number of overflows the sonar will require for a maximum
+// distance it can return.
 volatile uint32_t numOV_max_sonar = 0;
 
+// Port ping setup
 volatile uint8_t *ddr_sonar  = &DDRD;
 volatile uint8_t *port_sonar = &PORTD;
 volatile uint8_t *pin_sonar  = &PIND;
 
+// My TOP value for Fast PWM Top mode.
 volatile uint8_t myTOP;
 
+// Velocity of sound.
 float vel_sound = 343.0f;
 
+
 // Function Prototypes
+
 // Debugging USART functions
 void usart_debugging(void);
 void usart_init(float baud_rate);
@@ -59,37 +74,82 @@ void usart_send_num(float num, char num_int, char num_decimal);
 float linear_mapping(float x, float x1, float x2, float y1, float y2);
 float sonar(void);
 void my_delay_us(unsigned long x);
-//void config_tc0(uint8_t myTOP);
 void config_tc0();
 
+
+// Timer overflow, number of overflows  for the current PWM signal.  A
+// flag gets set in hardware then the ISR gets called.
+//
 ISR(TIMER0_OVF_vect)
 {
     numOV++;
 }
 
-//void config_tc0(uint8_t myTOP)
+
+
 void config_tc0()
 {
+    // One clock cycle time.
     clock_tc0 = 16.0e6 / prescaler;
 
     // Mode 7: Fast PWM where TOP = OCR0A
-    // WGM02=1 (in TCCR0B), WGM01=1, WGM00=1
+    // WGM02=1 (in TCCR0B), WGM01=1, WGM00=1 (TCCR0A)
     // COM0B1=1 (Non-inverting PWM on OC0B/PD5)
     TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);
-    TCCR0B = (1 << WGM02); // Prescaler is 0 right now, started by start_tc0 macro
+    TCCR0B = (1 << WGM02);// Prescaler is 0 right now, started by
+                          // start_tc0 macro.
 
+    // Setting  TOP for  Fast FWM  Top Mode  of TC0.  From a  positive
+    // linear mapping of last four digits of my student id card to TOP
+    // value range.
+    //
     myTOP = (uint8_t)linear_mapping(7723, 0, 9999, 100, 255);
     usart_send_string("myTOP=");
     usart_send_num(myTOP, 4, 0);
     usart_send_byte('\n');
 
 
-    OCR0A = myTOP;  // This sets the Period/Frequency
-    OCR0B = 10;      // This sets the Duty Cycle (Brightness)
+    OCR0A = myTOP;  // This sets the Period/Frequency of the PWM signal.
+    OCR0B = 10;     // This sets the Duty Cycle (Brightness of the LED)
         
-        // Tov = (TOP + 1) / clock_tc0. With TOP=255 and 16MHz, Tov = 16us
+    // Tov=(TOP+1) // +1 a clock_tc0. With TOP=255 and 16MHz, Tov =
+    // 16us
+    // SUMMARY:
+    // ////////////////////////////////////////////////////////////////
+    //
+    //  Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
+    //
+    // Simply, it  calculates how many  microseconds it takes  for the
+    // timer to  loop once.
+    //
+    // MY_TOP is the  number of clock ticks for the  counter TC0 to go
+    // from 0 to MY_TOP and back to 0 again.
+    //
+    // Thus, (total_number_of_ticks *  T(period of each tick)),
+    // is the time  it take for the  counter to do one  cycle, thus go
+    // from      0ticks      to     MY_TOPticks.
+    //
+    // Remember that  T=1/F in  seconds and F=F_CPU/prescalor,  in the
+    // program clock_tc0 is defined as clock_tc0=F_CPU/prescaler, thus
+    // the equation for Tov becomes:
+    // Tov =  ((float)MY_TOP  +  1.0f)  / clock_tc0 * 1.0e6 us.
+    //
+    // Also, looking at the graph of  how PWM's are generated, you can
+    // see that Tov is  also the period of the PWM  signal at OC0B for
+    // Fast PWM Top Mode.
+    //
+    // Aside, note that  at compare  match means, TCNTO=OCROB/A,
+    // 0CF0B flag is set and overflow interrupt occurs, as well as clearing OCB0.
+    //
+    // The Result:
+    // If MY_TOP is 255 and your clock is 16MHz, Tov becomes 16us.
+    // That is Tov = (255+1)/16 * 1.0e6 = 16us
+    //
+    // SUMMARY: ////////////////////////////////////////////////////////////////
+    
     Tov = ((float)myTOP + 1.0f) / clock_tc0 * 1.0e6;
 
+    // Velocity = distance/time
     numOV_max_sonar = 12.0 / vel_sound / Tov * 1.0e6;
 }
 
@@ -98,26 +158,19 @@ int main(void)
     usart_init(9600);
 
     bitSet(DDRD, pin_oc0b);          // PD5 as output
-    bitSet(*ddr_sonar, pin_trigger); 
-    bitClear(*ddr_sonar, pin_echo);  
+    bitSet(*ddr_sonar, pin_trigger); // pin_trigger output
+    bitClear(*ddr_sonar, pin_echo);  // pin_echo as input
 
-    //config_tc0(myTOP);
-    config_tc0();
-    start_tc0;
+    config_tc0(); // config TC0, timer counter 0
+    start_tc0; // enable TC0
     sei();
 
 
-    while (1)
-    {
+    while (1){
           
-        //usart_send_string("BEFORE sonar()\n");
-        usart_send_byte('\n');
-                
         float D = sonar();
-        //usart_send_string("AFTER sonar()\n");
-        //usart_send_byte('\n');
 
-
+        // print out the distance on the serial monitor
         usart_send_num(D, 3, 3);
         usart_send_byte(';');
 
@@ -128,119 +181,80 @@ int main(void)
         // LED attached to OCR0B gets dimmer with increasing distance.
         //
         OCR0B = (uint8_t)linear_mapping(D, 10, 300, myTOP-1, 10);
-//        OCR0B = (uint8_t)linear_mapping(D, 10, 300, 10, myTOP-1);
-         
+
+        // print out the duty cycle on the serial monitor
         usart_send_num(OCR0B, 3, 0);
         usart_send_byte('\n');
 
-        // usart_send_string("BEFORE my_delay_us()\n");
-        //usart_send_byte('\n');
-
+        // To allow the Sonar to reset
         my_delay_us(1000UL * 1000UL); // 1s delay
 
-        //usart_send_string("AFTER my_delay_us()\n");
-        //usart_send_byte('\n');
                 
     }
 }
 
 
 
-float sonar(void)
-{
+float sonar(void){
+
+    // Trigger the sonar
     bitClear(*port_sonar, pin_trigger);
     my_delay_us(2);
     bitSet(*port_sonar, pin_trigger);
     my_delay_us(11);
     bitClear(*port_sonar, pin_trigger);
 
-    while (!bitCheck(*pin_sonar, pin_echo));
-
+    
+    while (!bitCheck(*pin_sonar, pin_echo))
+        ;
+    
+    // We  have  received  the  echo   signal,  start  timing  it  buy
+    // using ISR(TIMER0_OVF_vect) to count the number of overflows.
     enable_tc0_int;
     numOV = 0;
     TCNT0 = 0;
-
     while (bitCheck(*pin_sonar, pin_echo) && numOV < numOV_max_sonar);
 
+    // Echo signal has gone low, stop timing.
     disable_tc0_int;
     uint8_t tmp = TCNT0;
 
+    // Note: Velocity  = Distance/Time,  so,
+    // D = (time_echo_signal_is_high * velocity_of_sound/2).
+    // Where D is the distance_to_the_obstacle in m.
+
+    // Remember that the Distance value returned by the ultrasonic
+    // sensor is 2D,  the round trip distance  of the trigger/echo
+    // signals.
+        
+    // Which   implies   that time_echo_signal_is_high = 2D/V.
+    //
+    // The velocity of a sound wave is 346m/s@25degreesC.
+    //
+        
+    // Also  remember that  echo_high_us_count  is in  us and  the
+    // formula requires seconds.   So divide echo_high_us_count by
+    // number of us in a second.
+    
     float tElapse = (float)numOV * Tov + ((float)tmp / clock_tc0) * 1.0e6;
+
+    // V=d/t => d=V*t, remember the sonar returns 2*D, round trip distance.
     float Dmm = (tElapse / 1.0e6) * vel_sound / 2.0f * 1000.0f;
 
     return Dmm;
 }
 
 
-// void my_delay_us(unsigned long x)
-// {
-//     // 1. Calculate how many full timer cycles (overflows) are needed
-//     unsigned long numOV_max = (float)x / Tov;
-    
-//     // 2. Calculate the remaining ticks after the full cycles are done
-//     // We multiply by clock_tc0 to convert time back into "timer ticks"
-//     float remainder_us = (float)x - ((float)numOV_max * Tov);
-//     unsigned int tcnt0_max = (remainder_us / 1.0e6) * clock_tc0;
-
-//     // --- CRITICAL FIX ---
-//     // If tcnt0_max is calculated to be >= MY_TOP, the while() loop 
-//     // will hang forever because TCNT0 resets to 0 at MY_TOP.
-//     if (tcnt0_max >= MY_TOP)
-//     {
-//         tcnt0_max = MY_TOP - 1;
-//     }
-
-//     // 3. Handle the full overflow counts
-//     if (numOV_max > 0)
-//     {
-//         numOV = 0;
-//         TCNT0 = 0;
-//         enable_tc0_int;
-//         while (numOV < numOV_max); // Wait for the ISR to increment numOV
-//         disable_tc0_int;
-//     }
-
-//     // 4. Handle the remaining partial cycle
-//     TCNT0 = 0;
-//     while (TCNT0 < (uint8_t)tcnt0_max); 
-// }
-
-// void my_delay_us(unsigned long x)
-// {
-//     unsigned long numOV_max = (float)x / Tov;
-
-//     // Calculate the remainder ticks
-//     float remainder_time = (float)x - ((float)numOV_max * Tov);
-//     unsigned char tcnt0_max = (remainder_time / 1.0e6) * clock_tc0;
-
-//     // Safety Check: Ensure tcnt0_max does not exceed the hardware limit
-//     if (tcnt0_max >= MY_TOP) {
-//         tcnt0_max = MY_TOP-1;
-//     }
-
-//     if (numOV_max > 0)
-//     {
-//         numOV = 0;
-//         TCNT0 = 0;
-//         enable_tc0_int;
-//         while (numOV < numOV_max);
-//         disable_tc0_int;
-//     }
-
-//     TCNT0 = 0;
-//     while (TCNT0 < tcnt0_max); 
-// }
-
-
 
 void my_delay_us(unsigned long x)
 {
+    // Maximum number of overflow times, total number of full ticks in us.
     unsigned long numOV_max = (float)x / Tov;
-    // TCNT0 now counts up to OCR0A instead of 255
+
+    // Remainder time in clock cycles.
     unsigned char tcnt0_max = ((float)x - (float)numOV_max * Tov) / 1.0e6 * clock_tc0;
 
-    if (numOV_max > 0)
-    {
+    if (numOV_max > 0){
         numOV = 0;
         TCNT0 = 0;
         enable_tc0_int;
@@ -254,59 +268,37 @@ void my_delay_us(unsigned long x)
 
 
 
-// chatGPT - wrks, linear_mapping() seems opposite though
-// void my_delay_us(unsigned long x)
-// {
-//     // Timer0 is in Fast PWM TOP mode, so one full timer cycle is:
-//     // 0, 1, 2, ..., OCR0A  ->  (OCR0A + 1) ticks
-//     uint16_t ticks_per_overflow = (uint16_t)OCR0A + 1U;
+float linear_mapping(float x, float x1, float x2, float y1, float y2){
 
-//     // Convert requested delay in microseconds to timer ticks.
-//     // total_ticks = x * (F_CPU / prescaler) / 1e6
-//     uint64_t total_ticks =
-//         ((uint64_t)F_CPU * (uint64_t)x) / ((uint64_t)prescaler * 1000000ULL);
+    // Linear mapping equation: slope = (y2 -y1)/(x2-x1)
+    //
+    // We have y vs x 
+    //
+    // The slope is essentialy the gradient of the straight line, also
+    // known as  the rate of change.   The rate of change  in a linear
+    // equation is constant.  So when  we use linear mapping, we apply
+    // a  constant rate  of change  between  the input  range and  the
+    // output range.
 
-//     // Number of full Timer0 cycles needed
-//     uint32_t full_overflows = (uint32_t)(total_ticks / ticks_per_overflow);
+    // To get greater y more quickly you need to increase the slope by
+    // increasion y2.  
 
-//     // Remaining ticks after the full cycles
-//     uint8_t remaining_ticks = (uint8_t)(total_ticks % ticks_per_overflow);
-
-//     // Do the full overflows in safe chunks so 16-bit numOV cannot wrap
-//     while (full_overflows > 0)
-//     {
-//         uint16_t chunk = (full_overflows > 60000UL) ? 60000U : (uint16_t)full_overflows;
-
-//         numOV = 0;
-//         TCNT0 = 0;
-//         enable_tc0_int;
-//         while (numOV < chunk)
-//             ;
-//         disable_tc0_int;
-
-//         full_overflows -= chunk;
-//     }
-
-//     // Do the leftover ticks.
-//     // Since remaining_ticks < ticks_per_overflow, it is guaranteed
-//     // to be <= OCR0A, so this loop can always finish.
-//     if (remaining_ticks > 0)
-//     {
-//         TCNT0 = 0;
-//         while (TCNT0 < remaining_ticks)
-//             ;
-//     }
-// }
+    // By swapping y1 and y2 the slope becomes -ve(as y2>y1) so we get
+    // a swapped around effect, or -ve linear mapping.
 
 
-
-float linear_mapping(float x, float x1, float x2, float y1, float y2)
-{
+    // Clamp input so it stays in  sensor range.
+    //
     // 1. Clamp the input to the lower bound
     if (x <= x1) return y1;
     
     // 2. Clamp the input to the upper bound
     if (x >= x2) return y2;
+
+    
+    // Note: You lose precision with integer division because integers
+    // cannot store  fractional parts. When two  integers are divided,
+    // the result is truncated (the decimal part is discarded).
     
     // 3. Perform Linear Interpolation (Lerp)
     // Formula: y = y1 + (x - x1) * (slope)

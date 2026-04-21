@@ -58,8 +58,8 @@ Also, looking  at the graph  of how PWM's  are generated, you  can see
 that Tov is also the period of the PWM signal at OC0B for Fast PWM Top
 Mode.
 
-Aside,  note that  at  compare  match means,  0CF0B  flag  is set  and
-overflow interrupt occurs, as well as clearing OCB0.
+Aside, note that at compare match means, TCNTO=OCROB/A, //0CF0B flag is
+set and overflow interrupt occurs, as well as clearing OCB0.
 
 The Result:
 If MY_TOP is 255 and your clock is 16MHz, Tov becomes 16.
