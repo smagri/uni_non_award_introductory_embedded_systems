@@ -141,9 +141,11 @@ void config_tc0()
     // Aside, note that  at compare  match means, TCNTO=OCROB/A,
     // 0CF0B flag is set and overflow interrupt occurs, as well as clearing OCB0.
     //
-    // The Result:
-    // If MY_TOP is 255 and your clock is 16MHz, Tov becomes 16us.
-    // That is Tov = (255+1)/16 * 1.0e6 = 16us
+    // The  Result: If  MY_TOP is  255 and  your clock  is 16MHz,  Tov
+    // becomes 16us, and prescaler=1
+    //
+    // ie Tov=(255+1)*T=256*1/F= 256*(1/(F_CPU/Prescaler))=(256*Prescaler)/F_CPU
+    //        (256*1/16x10^6)seconds=(256/16*10^6)*1*10^-6=256/16=16us.
     //
     // SUMMARY: ////////////////////////////////////////////////////////////////
     
