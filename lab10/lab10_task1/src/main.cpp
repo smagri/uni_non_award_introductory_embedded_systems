@@ -1,6 +1,8 @@
 #include <avr/io.h>
 #include <stdlib.h>
 #include <avr/interrupt.h>
+#include <util/delay.h>
+
 
 #define bitSet(reg, n)    ((reg) |= (1 << (n)))
 #define bitClear(reg, n)  ((reg) &= ~(1 << (n)))
@@ -13,49 +15,33 @@
 #define enable_tc0_int    (bitSet(TIMSK0, TOIE0))
 #define disable_tc0_int   (bitClear(TIMSK0, TOIE0))
 
-#define pin_trigger PD4
-#define pin_echo    PD7
-#define pin_oc0b    PD5  // Changed from PD6 because OCR0A is now TOP
+#define pin_oc0b    PD5  // for atmega328p
+#define pin_oc2b    PD3  // for atmega328p
 
 #define prescaler 1
 
-// Testing TOP  values.  Initially anything  less than 245  would hang
-// the program in  my_delay_us().  This was due to  a counter overflow
-// fov numOV in the routine.
-//
-//#define MY_TOP 219
-//#define MY_TOP 245
-//#define MY_TOP    199 
-//#define MY_TOP 240
-
 
 // Total _time_ taken for the counter to count from 0->TOP-1->0 again.
-float Tov;
+float timer2_overflow_time_us;
 
 // T=1/F, the perioud of each clock tick.  Where is F/prescaler.
-float clock_tc0;
+//float clock_tc0;
+float period_of_tick;
 
-// Kai's original code, causes my_delay_us() to hang as numOV overflows:
-//volatile unsigned int numOV = 0;
-//volatile unsigned int numOV_max_sonar = 0;
+// Kai's original code, causes my_delay_us() to hang as num_timer2_overflow overflows:
+//volatile unsigned int num_timer2_overflow = 0;
+//volatile unsigned int num_timer2_overflow_max_sonar = 0;
 //
 // Avoids counter overflow in my_delay_us() for 1s delay.
-volatile uint32_t  numOV = 0;
+volatile uint32_t  num_timer2_overflow = 0;
 
-// Max number of overflows the sonar will require for a maximum
-// distance it can return.
-volatile uint32_t numOV_max_sonar = 0;
+//volatile uint8_t *ddr_port_d  = &DDRD;
+//volatile uint8_t *port_d = &PORTD;
 
-// Port ping setup
-volatile uint8_t *ddr_sonar  = &DDRD;
-volatile uint8_t *port_sonar = &PORTD;
-volatile uint8_t *pin_sonar  = &PIND;
 
-// My TOP value for Fast PWM Top mode.
+// My TOP value.
 volatile uint8_t myTOP;
 
-// Velocity of sound.
-float vel_sound = 343.0f;
 
 
 // Function Prototypes
@@ -71,109 +57,37 @@ void usart_send_num(float num, char num_int, char num_decimal);
 
 
 float linear_mapping(float x, float x1, float x2, float y1, float y2);
-float sonar(void);
-void my_delay_us(unsigned long x);
+//void my_delay_us(unsigned long x);
 void config_tc0();
+void config_tc2();
 
 
 // Timer overflow, number of overflows  for the current PWM signal.  A
 // flag gets set in hardware then the ISR gets called.
 //
-ISR(TIMER0_OVF_vect)
+ISR(TIMER2_OVF_vect)
 {
-    numOV++;
+    num_timer2_overflow++;
 }
 
 
-
-void config_tc0()
-{
-    // One clock cycle time.
-    clock_tc0 = 16.0e6 / prescaler;
-
-    // Mode 7: Fast PWM where TOP = OCR0A
-    // WGM02=1 (in TCCR0B), WGM01=1, WGM00=1 (TCCR0A)
-    // COM0B1=1 (Non-inverting PWM on OC0B/PD5)
-    TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);
-    TCCR0B = (1 << WGM02);// Prescaler is 0 right now, started by
-                          // start_tc0 macro.
-
-    // Setting  TOP for  Fast FWM  Top Mode  of TC0.  From a  positive
-    // linear mapping of last four digits of my student id card to TOP
-    // value range.
-    //
-    myTOP = (uint8_t)linear_mapping(7723, 0, 9999, 100, 255);
-    usart_send_string("myTOP=");
-    usart_send_num(myTOP, 4, 0);
-    usart_send_byte('\n');
-
-
-    OCR0A = myTOP;  // This sets the Period/Frequency of the PWM signal.
-    OCR0B = 10;     // This sets the Duty Cycle (Brightness of the LED)
-        
-    // Tov=(TOP+1) // +1 a clock_tc0. With TOP=255 and 16MHz, Tov =
-    // 16us
-    // SUMMARY:
-    // ////////////////////////////////////////////////////////////////
-    //
-    //  Tov = ((float)MY_TOP + 1.0f) / clock_tc0 * 1.0e6;
-    //
-    // Simply, it  calculates how many  microseconds it takes  for the
-    // timer to  loop once.
-    //
-    // MY_TOP is the  number of clock ticks for the  counter TC0 to go
-    // from 0 to MY_TOP and back to 0 again.
-    //
-    // Thus, (total_number_of_ticks *  T(period of each tick)),
-    // is the time  it take for the  counter to do one  cycle, thus go
-    // from      0ticks      to     MY_TOPticks.
-    //
-    // Remember that  T=1/F in  seconds and F=F_CPU/prescalor,  in the
-    // program clock_tc0 is defined as clock_tc0=F_CPU/prescaler, thus
-    // the equation for Tov becomes:
-    // Tov =  ((float)MY_TOP  +  1.0f)  / clock_tc0 * 1.0e6 us.
-    //
-    // Also, looking at the graph of  how PWM's are generated, you can
-    // see that Tov is  also the period of the PWM  signal at OC0B for
-    // Fast PWM Top Mode.
-    //
-    // Aside, note that  at compare  match means, TCNTO=OCROB/A,
-    // 0CF0B flag is set and overflow interrupt occurs, as well as clearing OCB0.
-    //
-    // The  Result: If  MY_TOP is  255 and  your clock  is 16MHz,  Tov
-    // becomes 16us, and prescaler=1
-    //
-    // ie Tov=(255+1)*T=256*1/F= 256*(1/(F_CPU/Prescaler))=(256*Prescaler)/F_CPU
-    //        (256*1/16x10^6)seconds=(256/16*10^6)*1*10^-6=256/16=16us.
-    //
-    // SUMMARY: ////////////////////////////////////////////////////////////////
-    
-    Tov = ((float)myTOP + 1.0f) / clock_tc0 * 1.0e6;
-
-    // Velocity = distance/time
-    numOV_max_sonar = 12.0 / vel_sound / Tov * 1.0e6;
-}
 
 int main(void)
 {
     usart_init(9600);
 
     bitSet(DDRD, pin_oc0b);          // PD5 as output
-    bitSet(*ddr_sonar, pin_trigger); // pin_trigger output
-    bitClear(*ddr_sonar, pin_echo);  // pin_echo as input
+    bitSet(DDRD, pin_oc2b);          // PD3 as output
 
-    config_tc0(); // config TC0, timer counter 0
+    config_tc0(); // configure TC0, Timer Counter 0
+    config_tc2(); // configure TC2, Timer Counter 2
     start_tc0; // enable TC0
+    start_tc2; // enable TC2
     sei();
 
 
     while (1){
           
-        float D = sonar();
-
-        // print out the distance on the serial monitor
-        usart_send_num(D, 3, 3);
-        usart_send_byte(';');
 
         // Map distance to OCR0B (Duty Cycle) instead of OCR0A.
         //
@@ -181,91 +95,133 @@ int main(void)
         // distance increases  the duty  cycle decreaes and  hence the
         // LED attached to OCR0B gets dimmer with increasing distance.
         //
-        OCR0B = (uint8_t)linear_mapping(D, 10, 300, myTOP-1, 10);
+        OCR0B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOP-1);
+        OCR2B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOP-1);
+
 
         // print out the duty cycle on the serial monitor
         usart_send_num(OCR0B, 3, 0);
         usart_send_byte('\n');
+        usart_send_num(OCR2B, 3, 0);
+        usart_send_byte('\n');
 
-        // To allow the Sonar to reset
         my_delay_us(1000UL * 1000UL); // 1s delay
-
                 
     }
 }
 
 
 
-float sonar(void){
+///////////////////////////////////////////////////////////////////////////////
+//                           User defined functions                          //
+///////////////////////////////////////////////////////////////////////////////
 
-    // Trigger the sonar
-    bitClear(*port_sonar, pin_trigger);
-    my_delay_us(2);
-    bitSet(*port_sonar, pin_trigger);
-    my_delay_us(11);
-    bitClear(*port_sonar, pin_trigger);
+void config_tc0{
 
+    // Period of one tick
+    period_of_tick = 1/(F_CPU/prescaler);
+
+    TCCR0A = 0;
+    TCCR0B = 0;
     
-    while (!bitCheck(*pin_sonar, pin_echo))
-        ;
-    
-    // We  have  received  the  echo   signal,  start  timing  it  buy
-    // using ISR(TIMER0_OVF_vect) to count the number of overflows.
-    enable_tc0_int;
-    numOV = 0;
-    TCNT0 = 0;
-    while (bitCheck(*pin_sonar, pin_echo) && numOV < numOV_max_sonar);
-
-    // Echo signal has gone low, stop timing.
-    disable_tc0_int;
-    uint8_t tmp = TCNT0;
-
-    // Note: Velocity  = Distance/Time,  so,
-    // D = (time_echo_signal_is_high * velocity_of_sound/2).
-    // Where D is the distance_to_the_obstacle in m.
-
-    // Remember that the Distance value returned by the ultrasonic
-    // sensor is 2D,  the round trip distance  of the trigger/echo
-    // signals.
-        
-    // Which   implies   that time_echo_signal_is_high = 2D/V.
+    // Timer0 Phase Correct PWM, TOP = OCR0A  (Mode 5)
     //
-    // The velocity of a sound wave is 346m/s@25degreesC.
+    // Set waveform generation mode: WGM02:0 = 101
+    TCCR0A = (1 << WGM00);          // WGM01=0, WGM00=1
+    TCCR0B = (1 << WGM02);          // WGM02=1
+
+    // We want PWM output on OC0B in non-inverting mode. OCR0A will be
+    // used for myTOP,  or period of PWM frequency and  OCROB for duty
+    // cycle.
     //
-        
-    // Also  remember that  echo_high_us_count  is in  us and  the
-    // formula requires seconds.   So divide echo_high_us_count by
-    // number of us in a second.
+    // We   also   require   Clear   OC0B  on   compare   match   when
+    // up-counting. And Set OC0B compare match when down-counting.
+    //
+    TCCR0A = (1 << COM0B1)
+
+    // Prescaler need to be set to a value for required Fpwm such that
+    // TOP doesn't exceed its range.
+    TCCR0B |= (1 << CS00); // prescaler = 1
+
+    // Setting TOP  for phase  correct PWM  TOP Mode  of TC0.   From a
+    // positive linear mapping  of last three digits of  my student id
+    // card to TOP value range.
+    //
+    // TCO is an 8 bit counter so it's range is from 0-255
+    //
+    // TOP+1 is the total_number_of_ticks for  timer to go from 0ticks
+    // to myTOP+1 ticks.
+    myTOP = (uint8_t)linear_mapping(1723, 1000, 2000, 100, 255);
+    usart_send_string("myTOP_OCR0A=");
+    usart_send_num(myTOP, 4, 0);
+    usart_send_byte('\n');
+
+    OCR0A = myTOP;  // This sets the Period/Frequency of the PWM signal.
+    OCR0B = 10;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
+
     
-    float tElapse = (float)numOV * Tov + ((float)tmp / clock_tc0) * 1.0e6;
+    // timer0_overflow_time_us=(total_number_of_ticks * period_of_tick) * 1.0e6
+    //
+    // In phase  correct PWM TOP  mode we need to  * 2 as  the counter
+    // overflows after it counts from BOTTOM to TOP and back to BOTTOM
+    // again.
+    //
+    timer0_overflow_time_us = ((float)myTOP + 1.0f) * period_of_tick * 1.0e6 * 2;
 
-    // V=d/t => d=V*t, remember the sonar returns 2*D, round trip distance.
-    float Dmm = (tElapse / 1.0e6) * vel_sound / 2.0f * 1000.0f;
-
-    return Dmm;
+    
 }
 
 
 
-void my_delay_us(unsigned long x)
-{
-    // Maximum number of overflow times, total number of full ticks in us.
-    unsigned long numOV_max = (float)x / Tov;
+void config_tc2{
 
-    // Remainder time in clock cycles.
-    unsigned char tcnt0_max = ((float)x - (float)numOV_max * Tov) / 1.0e6 * clock_tc0;
+    period_of_tick = 1/(F_CPU/prescaler);
 
-    if (numOV_max > 0){
-        numOV = 0;
-        TCNT0 = 0;
-        enable_tc0_int;
-        while (numOV < numOV_max);
-        disable_tc0_int;
-    }
+    // Fast PWM, TOP = OCR2A (Mode 7)
+    //
+    // Set waveform generation mode: WGM02:0 = 111
+    TCCR2A |= (1 << WGM21) | (1 << WGM20);
+    TCCR2B |= (1 << WGM22);
 
-    TCNT0 = 0;
-    while (TCNT0 < tcnt0_max);
+    // We want PWM output on OC2B in non-inverting mode. OCR2A will be
+    // used for myTOP,  or period of PWM frequency and  OCR2B for duty
+    // cycle.
+    //
+    // We also  require clear OC0B  on compare  match and set  OCOB at
+    // bottom.
+    //
+    TCCR2A |= (1 << COM2B1);
+
+    // Prescaler need to be set to a value for required Fpwm such that
+    // TOP doesn't exceed its range.
+    TCCR2B |= (1 << CS00); // prescaler = 1
+
+    // Setting TOP  for phase  correct PWM  TOP Mode  of TC0.   From a
+    // positive linear mapping  of last three digits of  my student id
+    // card to TOP value range.
+    //
+    // TCO is an 8 bit counter so it's range is from 0-255
+    //
+    // TOP+1 is the total_number_of_ticks for  timer to go from 0ticks
+    // to myTOP+1 ticks.
+    myTOP = (uint8_t)linear_mapping(1723, 1000, 2000, 100, 255);
+    usart_send_string("myTOP_OCR2A=");
+    usart_send_num(myTOP, 4, 0);
+    usart_send_byte('\n');
+
+    OCR0A = myTOP;  // This sets the Period/Frequency of the PWM signal.
+    OCR0B = 10;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
+
+    
+    // timer2_overflow_time_us=(total_number_of_ticks * period_of_tick) * 1.0e6
+    //
+    timer2_overflow_time_us = ((float)myTOP + 1.0f) * period_of_tick * 1.0e6;
+
 }
+
+
+
+
 
 
 
