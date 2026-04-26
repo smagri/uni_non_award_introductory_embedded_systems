@@ -7,10 +7,12 @@
 #define bitClear(reg, n)  ((reg) &= ~(1 << (n)))
 #define bitCheck(reg, n)  (((reg) >> (n)) & 1)
 
-#define start_tc2   (TCCR2B |= 0b001)   // prescaler = 1
+//#define start_tc2   (TCCR2B |= 0b001)   // prescaler = 1
+//#define start_tc2   (TCCR2B |= 0b100)   // prescaler = 1
 #define stop_tc2    (TCCR2B &= ~0b111)
 
-#define start_tc0   (TCCR0B |= 0b001)   // prescaler = 1
+
+//#define start_tc0   (TCCR0B |= 0b001)   // prescaler = 1
 #define stop_tc0    (TCCR0B &= ~0b111)
 
 // Timer/Counter overflow interrupt enable and disable
@@ -20,7 +22,8 @@
 #define pin_oc0b    PD5  // for atmega328p
 #define pin_oc2b    PD3  // for atmega328p
 
-#define prescaler 1
+#define prescalerTC0 64
+#define prescalerTC2 128
 
 
 // Total _time_ taken for the counter to count from 0->TOP-1 again.
@@ -82,7 +85,7 @@ ISR(TIMER2_OVF_vect)
 void config_tc0(void){
 
     // Period of one tick
-    period_of_tick = 1.0f/(float)(F_CPU/prescaler);
+    period_of_tick = 1.0f/(float)(F_CPU/prescalerTC0);
 
     // Timer0 Phase Correct PWM, TOP = OCR0A  (Mode 5)
     //
@@ -103,7 +106,7 @@ void config_tc0(void){
     // start_tc2 are redundant.
     //
     TCCR0A = (1<<COM0B1) | (1 << WGM00);
-    TCCR0B = (1 << WGM02) | (1 << CS00);
+    TCCR0B = (1 << WGM02) | (1 << CS00) | (1 << CS01);
 
 
     // Setting TOP  for phase  correct PWM  TOP Mode  of TC0.   From a
@@ -114,12 +117,14 @@ void config_tc0(void){
     //
     // Check that myTOCtc0=212
     myTOPtc0 = (uint8_t)linear_mapping(1723, 1000, 2000, 100, 255);
+    //myTOPtc0 = myTOPtc0/2;
+    //myTOPtc0 = 125;
     usart_send_string("myTOPtc0=");
     usart_send_num(myTOPtc0, 4, 0);
     usart_send_byte('\n');
 
     OCR0A = myTOPtc0;  // This sets the Period/Frequency of the PWM signal.
-    OCR0B = 10;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
+    OCR0B = 50;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
 
     
     // timer0_overflow_time_us=(total_number_of_ticks * period_of_tick) * 1.0e6
@@ -138,8 +143,8 @@ void config_tc0(void){
 
 
 void config_tc2(void){
-
-    period_of_tick = 1.0f/(float)(F_CPU/prescaler);
+    
+    period_of_tick = 1.0f/(float)(F_CPU/prescalerTC2);
 
     // Fast PWM, TOP = OCR2A (Mode 7)
     //
@@ -158,7 +163,7 @@ void config_tc2(void){
 
     // Prescaler need to be set to a value for required Fpwm such that
     // TOP doesn't exceed its range.
-    TCCR2B |= (1 << CS20); // prescaler = 1
+    TCCR2B |= (1 << CS22) | (1 << CS20); // prescaler = 64
 
     // Setting TOP  for phase  correct PWM  TOP Mode  of TC0.   From a
     // positive linear mapping  of last three digits of  my student id
@@ -167,12 +172,14 @@ void config_tc2(void){
     // TCO is an 8 bit counter so it's range is from 0-255
     //
     myTOPtc2 = (uint8_t)linear_mapping(1723, 1000, 2000, 100, 255);
+    //myTOPtc2 = 249; // 1kHz
+    myTOPtc2--;// = 249; // 1kHz
     usart_send_string("myTOPtc2=");
     usart_send_num(myTOPtc2, 4, 0);
     usart_send_byte('\n');
 
     OCR2A = myTOPtc2;  // This sets the Period/Frequency of the PWM signal.
-    OCR2B = 10;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
+    OCR2B = 50;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
 
     
     // timer2_overflow_time_us=(total_number_of_ticks * period_of_tick) * 1.0e6
@@ -199,8 +206,8 @@ int main(void)
 
     config_tc0(); // configure TC0, Timer Counter 0
     config_tc2(); // configure TC2, Timer Counter 2
-    start_tc0; // enable TC0
-    start_tc2; // enable TC2
+    //start_tc0; // enable TC0
+    //start_tc2; // enable TC2
     sei();
 
 
@@ -212,9 +219,9 @@ int main(void)
         // Note: y2>y1(255-100) => +ve slope  for mapping, which => as
         // frequency increases the duty cycle increases.
         //
-        OCR0B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOPtc0-1);
-        OCR2B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOPtc2-1);
-
+        //OCR0B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOPtc0-1);
+        //OCR2B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOPtc2-1);
+        //OCR2B = 60;
 
         // print out the duty cycle on the serial monitor
         usart_send_num(OCR0B, 3, 0);
@@ -222,7 +229,7 @@ int main(void)
         usart_send_num(OCR2B, 3, 0);
         usart_send_byte('\n');
 
-        my_delay_us(1000UL * 1000UL); // 1s delay
+        //my_delay_us(1000UL * 1000UL); // 1s delay
                 
     }
 }
