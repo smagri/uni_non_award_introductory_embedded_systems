@@ -7,13 +7,18 @@
 #define bitClear(reg, n)  ((reg) &= ~(1 << (n)))
 #define bitCheck(reg, n)  (((reg) >> (n)) & 1)
 
-//#define start_tc2   (TCCR2B |= 0b001)   // prescaler = 1
-//#define start_tc2   (TCCR2B |= 0b100)   // prescaler = 1
+// Prescaler need to be set to a value for required Fpwm such that
+// TOP   doesn't  exceed   its  range.   Prescaler  =   128.   See
+// notes:26/4/2026 pg1.
+//
+//#define start_tc0         (TCCR0B |= 0b001)   // prescaler = 1
+//#define stop_tc0          (TCCR0B &= ~0b111)
+#define start_tc0   (TCCR0B |= 0b011)   // prescaler = 64
+#define stop_tc0    (TCCR0B &= ~0b111)
+//
+#define start_tc2   (TCCR2B |= 0b101)   // prescaler = 128
 #define stop_tc2    (TCCR2B &= ~0b111)
 
-
-//#define start_tc0   (TCCR0B |= 0b001)   // prescaler = 1
-#define stop_tc0    (TCCR0B &= ~0b111)
 
 // Timer/Counter overflow interrupt enable and disable
 #define enable_tc2_interrupt    (bitSet(TIMSK2, TOIE2))
@@ -49,7 +54,8 @@ volatile uint32_t  num_timer2_overflows = 0;
 //volatile uint8_t *port_d = &PORTD;
 
 
-// My TOP value.
+// My TOP value.   That is, how high the timer  counter needs to count
+// before one PWM cycle.
 volatile uint8_t myTOPtc0;
 volatile uint8_t myTOPtc2;
 
@@ -95,18 +101,20 @@ void config_tc0(void){
     // used for myTOP,  or period of PWM frequency and  OCROB for duty
     // cycle.
     //
-    // We   also   require   Clear   OC0B  on   compare   match   when
-    // up-counting. And Set OC0B compare match when down-counting.
+    // We  also   require  clear  OC0B   on  compare  match   when  up
+    // counting. Set OCOB on compare match when counting down.
     //
     // Prescaler need to be set to a value for required Fpwm such that
-    // TOP doesn't exceed its range.
+    // TOP   doesn't    exceed   its   range.     Prescaler=64.    See
+    // notes:26/4/2026 pg2.
     //
-    // // TODO: check later. Also, settint the clock select bits means
-    // the timers are  already started here, so  really start_tc0; and
-    // start_tc2 are redundant.
+    // Also, setting the  clock select bits, ie  setting the prescaler
+    // means the timers are started  here, so really start_tc0 is what
+    // we wont to see correct output on oscilloscope.
     //
-    TCCR0A = (1<<COM0B1) | (1 << WGM00);
-    TCCR0B = (1 << WGM02) | (1 << CS00) | (1 << CS01);
+    TCCR0A = (1 << COM0B1) | (1 << WGM00);
+    TCCR0B = (1 << WGM02);
+    //TCCR0B = (1 << WGM02) | (1 << CS00) | (1 << CS01);
 
 
     // Setting TOP  for phase  correct PWM  TOP Mode  of TC0.   From a
@@ -117,14 +125,19 @@ void config_tc0(void){
     //
     // Check that myTOCtc0=212
     myTOPtc0 = (uint8_t)linear_mapping(1723, 1000, 2000, 100, 255);
-    //myTOPtc0 = myTOPtc0/2;
-    //myTOPtc0 = 125;
     usart_send_string("myTOPtc0=");
     usart_send_num(myTOPtc0, 4, 0);
     usart_send_byte('\n');
 
-    OCR0A = myTOPtc0;  // This sets the Period/Frequency of the PWM signal.
-    OCR0B = 50;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
+    // OCROA  is  proportional  to  the Period/Frequency  of  the  PWM
+    // signal(see equation for  Fpwm signal) The larger  the TOP value
+    // is it means  the timer takes longer to complete  one PWM cycle,
+    // so  the frequency  is lower.   Conversly, the  smaller the  TOP
+    // means the timer  completes one PWM faster, so  the frequency is
+    // higher.
+    //
+    OCR0A = myTOPtc0;  
+    OCR0B = 106;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
 
     
     // timer0_overflow_time_us=(total_number_of_ticks * period_of_tick) * 1.0e6
@@ -153,17 +166,22 @@ void config_tc2(void){
     TCCR2B |= (1 << WGM22);
 
     // We want PWM output on OC2B in non-inverting mode. OCR2A will be
-    // used for myTOP,  or period of PWM frequency and  OCR2B for duty
-    // cycle.
+    // used for myTOP, proportional period  of PWM frequency and OCR2B
+    // for duty cycle.
     //
-    // We also  require clear OC0B  on compare  match and set  OCOB at
-    // bottom.
+    // We  also require  Clear OC0B  on  compare match.   Set OC0B  at
+    // BOTTOM.
     //
     TCCR2A |= (1 << COM2B1);
 
     // Prescaler need to be set to a value for required Fpwm such that
-    // TOP doesn't exceed its range.
-    TCCR2B |= (1 << CS22) | (1 << CS20); // prescaler = 64
+    // TOP  doesn't   exceed  its   range.   Prescaler  =   128.   See
+    // notes:26/4/2026 pg1.   However, we want start_tc2  to start the
+    // timers very  close together  to get the  desired effect  on the
+    // oscilloscope.  Setting  the prescaler  here starts  the counter
+    // timing.
+    //
+    //TCCR2B |= (1 << CS22) | (1 << CS20);
 
     // Setting TOP  for phase  correct PWM  TOP Mode  of TC0.   From a
     // positive linear mapping  of last three digits of  my student id
@@ -172,14 +190,26 @@ void config_tc2(void){
     // TCO is an 8 bit counter so it's range is from 0-255
     //
     myTOPtc2 = (uint8_t)linear_mapping(1723, 1000, 2000, 100, 255);
-    //myTOPtc2 = 249; // 1kHz
-    myTOPtc2--;// = 249; // 1kHz
+
+    // myToptc2  is =  myToctc0  - 1.   This is  the  outcome for  the
+    // TOP/myTOP value when you make  Ftc0=Ftc2 as required.  Refer to
+    // notes: 29/4/2026 pg3.
+    //
+    // OCROA   is  proportional   to   the  Period/Frequency(see   the
+    // calculation of the Fpwm signal)  of the PWM signal.  The larger
+    // the TOP  value is it means  the timer takes longer  to complete
+    // one  PWM cycle,  so  the frequency  is  lower.  Conversly,  the
+    // smaller the  TOP means the  timer completes one PWM  faster, so
+    // the frequency is higher.
+    //
+    //
+    myTOPtc2--;
     usart_send_string("myTOPtc2=");
     usart_send_num(myTOPtc2, 4, 0);
     usart_send_byte('\n');
 
     OCR2A = myTOPtc2;  // This sets the Period/Frequency of the PWM signal.
-    OCR2B = 50;     // This sets the Duty Cycle of the PWM signal on OCOB/PD5
+    OCR2B = 106;        // This sets the Duty Cycle of the PWM signal on OCOB/PD5
 
     
     // timer2_overflow_time_us=(total_number_of_ticks * period_of_tick) * 1.0e6
@@ -206,29 +236,26 @@ int main(void)
 
     config_tc0(); // configure TC0, Timer Counter 0
     config_tc2(); // configure TC2, Timer Counter 2
-    //start_tc0; // enable TC0
-    //start_tc2; // enable TC2
+
+    // They must be enabled quickly together to see the desired output
+    // on the oscilloscope.
+    start_tc0; // enable TC0
+    start_tc2; // enable TC2
     sei();
 
 
     while (1){
           
 
-        // Map distance to OCR0B (Duty Cycle) instead of OCR0A.
-        //
-        // Note: y2>y1(255-100) => +ve slope  for mapping, which => as
-        // frequency increases the duty cycle increases.
-        //
-        //OCR0B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOPtc0-1);
-        //OCR2B = (uint8_t)linear_mapping(1723, 1000, 2000, 100, myTOPtc2-1);
-        //OCR2B = 60;
+        // Continuously output on OCR0B(PD3,  blue wire and trace) and
+        // OCR2B(PD5, yellow wire and trace).
 
-        // print out the duty cycle on the serial monitor
-        usart_send_num(OCR0B, 3, 0);
-        usart_send_byte('\n');
-        usart_send_num(OCR2B, 3, 0);
-        usart_send_byte('\n');
+        // TC0 Phase Correct PWM, TOP = OCR0A  (Mode 5)
+        // TC2 Fast PWM, TOP = OCR2A (Mode 7)
 
+        // causing problems with finding the same period as TCNT2 gets
+        // reset there.
+        //
         //my_delay_us(1000UL * 1000UL); // 1s delay
                 
     }
