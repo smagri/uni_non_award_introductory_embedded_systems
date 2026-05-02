@@ -43,10 +43,24 @@
 #define prescalerTC2 128
 
 // Define feasible ranges for linear mapping:
-#define ADC_MIN 0 // minimum feasible ADC count for 10bit ADC
-#define ADC_MAX 1023 // maximum feasible ADC count for 10bit ADC
-#define DHT11_MIN 0 // Degrees C
-#define DHT11_MAX 50
+//
+// All values determined mid-morning to mid-day, may be readjusted at
+// night time.
+//
+// A bit of buffer, say 50 levels, was added to ADC_MIN/MAX as we were
+// hitting limits to often.
+#define ADC_MIN 500 // room temperature at 26.4 degrees
+#define ADC_MAX 650 // when warmed by my fingers holding the thermistor tightly
+
+#define TEMPERATURE_MIN 26.4 // degrees C, room temperature
+
+// degrees C, when holding thermistor tightly with my fingers, an estimate
+#define TEMPERATURE_MAX 33.0
+
+// LED pin connection on atmega328p.
+#define pin_adc PC3
+
+#define BUFFER_SIZE 50
 
 
 // Total _time_ taken for the counter to count from 0->TOP-1 again.
@@ -58,16 +72,13 @@ float timer2_overflow_time_us;
 float period_of_tick;
 
 
-// For linear mapping ADC values to temperatures
-float adc_min = ADC_MIN;
-float adc_max = ADC_MAX;
+// Our program buffer  that stores TX/RX data for the  Arduino that we
+// want to transmit from MCU->PC or recive data from the PC->MCU.
+//
+// all elements of usart_buffer is assgined to 0
+char usart_buffer[BUFFER_SIZE] = {0};
+char *ptr_to_usart_buffer = usart_buffer;
 
-float temperature_min = DHT11_MIN; 
-float temperature_max = DHT11_MAX;
-
-
-// LED pin connection on atmega328p.
-#define pin_adc PC3
 
 
 // Kai's original code, causes my_delay_us() to hang as num_timer2_overflow overflows:
@@ -90,6 +101,7 @@ void usart_send_byte(unsigned char data);
 void usart_send_string(const char *ptr_to_str);
 void usart_send_num(float num, char num_int, char num_decimal);
 
+void adc_init(void);
 
 float linear_mapping(float x, float x1, float x2, float y1, float y2);
 
@@ -121,16 +133,44 @@ void config_tc2(void){
 int main(void){
     
     // Interface the DTH11 to the atmega328p ports.
-    volatile uint8_t *ddr_reg = &DDRB; // used Data Direction Register B
-    volatile uint8_t *port_reg = &PORTB; // use port B register
-    volatile uint8_t *port_inputs_reg = &PINB;
+    volatile uint8_t *ddr_reg = &DDRC; // used Data Direction Register B
+    volatile uint8_t *port_reg = &PORTC; // use port B register
+    volatile uint8_t *port_inputs_reg = &PINC;
 
-    // Set pin_led to an output on port_led.
-    bitSet(*ddr_led, pin_led);
-    bitClear(*port_led, pin_led); // Start with the LED off
+    // Remember  by  default  all  pins  are  inputs  after  a  reset.
+    // However, setting them explicitly makes code more readable.
+    
+    // Configure A2D  port to  input, internal  pullup disabled  as it
+    // would  effect  the  thermistor  voltage divider  and  make  ADC
+    // readings wrong.
+    bitClear(*ddr_reg, pin_adc);
 
+    // Note, not the normal input configuration:
+    // bitSet(*port_reg, pin_adc); // enable the pull up
+    //
+    // For later, this is normally  how you access its value, however,
+    // we are using ISR here.
+    //
+    // adc_value = bitRead(*port_inputs_reg, pin_adc);
+    bitClear(*port_reg, pin_adc); // internal pullup disabled
+
+
+    // For linear mapping ADC  values to temperatures.  Thermistor ADC
+    // value  linearly   mapped  to  temperature.   Thermistor   is  a
+    // temperature sensitive resistor.
+    //
+    float temperature = 0;
+ 
+    float adc_min = ADC_MIN;
+    float adc_max = ADC_MAX;
+    
+    float temperature_min = TEMPERATURE_MIN; 
+    float temperature_max = TEMPERATURE_MAX;
+
+
+    
     usart_init(9600); // Initialise Regiters
-    adc_init(void); // Configure ADC 
+    adc_init(); // Configure ADC 
 
     sei(); // Enable global interrupts.
 
@@ -157,12 +197,24 @@ int main(void){
         usart_send_num(adc, 4, 0);
         // Telepot value terminating character.
         usart_send_string("\n");
-
+        if (adc >= adc_max) {
+            usart_send_string(">debug:CLAMP_MAX\n");
+        }
+        else if (adc <= adc_min){
+            usart_send_string(">debug:CLAMP_MIN\n");
+        }
         _delay_ms(100);
 
 
         temperature = linear_mapping(adc, adc_min, adc_max,
-                                     temperatures_min, temperature_max);
+                                     temperature_min, temperature_max);
+        // Get temperature value ready for plotting in vscode telepot:
+        usart_send_string(">temperature:");
+        // Temperature value as a decimal value
+        usart_send_num(temperature, 4, 2);
+        // Telepot value terminating character.
+        usart_send_string("\n");
+        _delay_ms(100);
 
     }
 
@@ -300,7 +352,7 @@ void  adc_init(void){
     
     // MUX3-0, pin will be used for voltage divider circuit.
     ADMUX = 0; // Should be 0 by default though.
-    ADMUX |= (1 << MUX2) | (1 << MUX0);
+    ADMUX |= (1 << MUX1) | (1 << MUX0);
 
     // Setting up the ADC:
     bitSet(ADMUX, REFS0); // Vcc is Vref == 5V
