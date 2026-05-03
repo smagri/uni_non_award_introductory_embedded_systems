@@ -92,8 +92,10 @@ volatile uint32_t  num_timer2_overflows = 0;
 volatile uint16_t adc = 0;
 
 // SPI Master byte received control
-volatile uint8_t masters_slave_byte = 0;
-volatile uint8_t master_received_slave_byte = 0;
+//volatile uint8_t masters_slave_byte = 0;
+//volatile uint8_t master_received_slave_byte = 0;
+volatile uint8_t slaves_master_byte = 0;
+volatile uint8_t slave_received_master_byte = 0;
 
 
 void usart_init(float baud_rate);
@@ -105,6 +107,7 @@ void usart_send_num(float num, char num_int, char num_decimal);
 
 void adc_init(void);
 void spi_master_init(void);
+void spi_slave_init(void);
 
 float linear_mapping(float x, float x1, float x2, float y1, float y2);
 
@@ -119,10 +122,17 @@ ISR(TIMER2_OVF_vect)
 
 
 
+// ISR(SPI_STC_vect)
+// {
+//     masters_slave_byte = SPDR;   // byte received from slave
+//     master_received_slave_byte = 1;
+// //    spi_busy = 0;
+// }
+
 ISR(SPI_STC_vect)
 {
-    masters_slave_byte = SPDR;   // byte received from slave
-    master_received_slave_byte = 1;
+    slaves_master_byte = SPDR;   // byte received from slave
+    slave_received_master_byte = 1;
 //    spi_busy = 0;
 }
 
@@ -182,14 +192,15 @@ int main(void){
 
     // Master conversion of its local temperature to an SPI byte to
     // send to slave.
-    uint8_t temperature_master_spi_byte;
+    uint8_t temperature_slave_spi_byte;
 
 
 
     
     usart_init(9600); // Initialise Regiters
     adc_init(); // Configure ADC
-    spi_master_init(); // Configure SPI xfers
+    //spi_master_init(); // Configure SPI xfers for master
+    spi_slave_init(); // Configure SPI xfers for slave
 
     sei(); // Enable global interrupts.
 
@@ -229,7 +240,7 @@ int main(void){
 
         // Linearly  map  the  ADC values(thermistor  readings)  to  a
         // floating point temperature value.
-        temperature_master = linear_mapping(adc, adc_min, adc_max,
+        temperature_slave = linear_mapping(adc, adc_min, adc_max,
                                             temperature_min, temperature_max);
 
 
@@ -238,50 +249,51 @@ int main(void){
         // requires reciving bytes as it does this most cleanly.  Note
         // for mapping, one byte has a value from 0-255.
         //
-        temperature_master_spi_byte =
-            linear_mapping(temperature_master,
+        temperature_slave_spi_byte =
+            linear_mapping(temperature_slave,
                            temperature_min, temperature_max,
                            0.0f, 255.0f);
 
         // Add 0.5 before casting so we round to nearest byte.
-        temperature_master_spi_byte =
-            ((uint8_t)(temperature_master_spi_byte + 0.5f));
+        temperature_slave_spi_byte =
+            ((uint8_t)(temperature_slave_spi_byte + 0.5f));
 
 
         
         // Master starts the SPI transfer by writing to SPDR.
-        SPDR = temperature_master_spi_byte;
+        SPDR = temperature_slave_spi_byte;
         _delay_ms(100);
+
         
         
         // Once master recives the slave temperature byte convert it to a float.
-        if (master_received_slave_byte) {
-            master_received_slave_byte = 0;
+        if (slave_received_master_byte) {
+            slave_received_master_byte = 0;
             
-            temperature_slave =
-                linear_mapping( ((float)masters_slave_byte), 0.0f, 255.0f,
+            temperature_master =
+                linear_mapping( ((float)slaves_master_byte), 0.0f, 255.0f,
                                 temperature_min, temperature_max );
 
             // Plot local master temperature in vscode via Teleplot.
-            usart_send_string(">temperature@master(local):");
-            usart_send_num(temperature_master, 4, 2);
+            usart_send_string(">temperature@SLAVE(local):");
+            usart_send_num(temperature_slave, 4, 2);
             usart_send_string("\n");
             _delay_ms(100);
 
-            usart_send_string(">spi_master_byte(local):");
-            usart_send_num(temperature_master_spi_byte, 4, 2);
+            usart_send_string(">spi_slave_byteSLAVE(local):");
+            usart_send_num(temperature_slave_spi_byte, 4, 2);
             usart_send_string("\n");
             _delay_ms(100);
-            usart_send_string(">spi_slave_byte:");
-            usart_send_num(masters_slave_byte, 4, 2);
+            usart_send_string(">spi_master_byteSLAVE:");
+            usart_send_num(slaves_master_byte, 4, 2);
             usart_send_string("\n");
             _delay_ms(100);
 
             
             
             // Plot slave temperature in vscode via Teleplot.
-            usart_send_string(">temperature@slave:");
-            usart_send_num(temperature_slave, 4, 2);
+            usart_send_string(">temperature@masterSLAVE");
+            usart_send_num(temperature_master, 4, 2);
             usart_send_string("\n");
             _delay_ms(100);
         }
@@ -298,6 +310,22 @@ int main(void){
 ///////////////////////////////////////////////////////////////////////////////
 //                           User defined functions                          //
 ///////////////////////////////////////////////////////////////////////////////
+void spi_slave_init(void)
+{
+    // PB4 = MISO as output
+    DDRB |= (1 << PB4);
+
+    // PB3 = MOSI, PB5 = SCK, PB2 = SS as inputs
+    DDRB &= ~((1 << PB3) | (1 << PB5) | (1 << PB2));
+
+    // Enable SPI and SPI interrupt
+    SPCR = (1 << SPE) | (1 << SPIE);
+
+    // Enable global interrupts
+    //sei();
+}
+
+
 
 void spi_master_init(void){
 
