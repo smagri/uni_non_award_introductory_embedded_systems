@@ -109,6 +109,7 @@ void adc_init(void);
 void spi_master_init(void);
 void spi_slave_init(void);
 
+float linear_mapping1(float x, float x1, float x2, float y1, float y2);
 float linear_mapping(float x, float x1, float x2, float y1, float y2);
 
 
@@ -240,7 +241,7 @@ int main(void){
 
         // Linearly  map  the  ADC values(thermistor  readings)  to  a
         // floating point temperature value.
-        temperature_slave = linear_mapping(adc, adc_min, adc_max,
+        temperature_slave = linear_mapping1(adc, adc_min, adc_max,
                                             temperature_min, temperature_max);
 
 
@@ -251,7 +252,7 @@ int main(void){
         //
         temperature_slave_spi_byte =
             linear_mapping(temperature_slave,
-                           temperature_min, temperature_max,
+                           0, 50,
                            0.0f, 255.0f);
 
         // Add 0.5 before casting so we round to nearest byte.
@@ -272,28 +273,28 @@ int main(void){
             
             temperature_master =
                 linear_mapping( ((float)slaves_master_byte), 0.0f, 255.0f,
-                                temperature_min, temperature_max );
+                                0, 50 );
 
             // Plot local master temperature in vscode via Teleplot.
             usart_send_string(">temperature@SLAVE(local):");
-            usart_send_num(temperature_slave, 4, 2);
+            usart_send_num(temperature_slave, 4, 3);
             usart_send_string("\n");
             _delay_ms(100);
 
-            usart_send_string(">spi_slave_byteSLAVE(local):");
-            usart_send_num(temperature_slave_spi_byte, 4, 2);
-            usart_send_string("\n");
-            _delay_ms(100);
-            usart_send_string(">spi_master_byteSLAVE:");
-            usart_send_num(slaves_master_byte, 4, 2);
-            usart_send_string("\n");
-            _delay_ms(100);
+            // usart_send_string(">spi_slave_byteSLAVE(local):");
+            // usart_send_num(temperature_slave_spi_byte, 4, 2);
+            // usart_send_string("\n");
+            // _delay_ms(100);
+            // usart_send_string(">spi_master_byteSLAVE:");
+            // usart_send_num(slaves_master_byte, 4, 2);
+            // usart_send_string("\n");
+            // _delay_ms(100);
 
             
             
             // Plot slave temperature in vscode via Teleplot.
-            usart_send_string(">temperature@masterSLAVE");
-            usart_send_num(temperature_master, 4, 2);
+            usart_send_string(">temperature@master@SLAVE:");
+            usart_send_num(temperature_master, 4, 3);
             usart_send_string("\n");
             _delay_ms(100);
         }
@@ -420,6 +421,44 @@ float linear_mapping(float x, float x1, float x2, float y1, float y2){
     
     // 2. Clamp the input to the upper bound
     if (x >= x2) return y2;
+
+    
+    // Note: You lose precision with integer division because integers
+    // cannot store  fractional parts. When two  integers are divided,
+    // the result is truncated (the decimal part is discarded).
+    
+    // 3. Perform Linear Interpolation (Lerp)
+    // Formula: y = y1 + (x - x1) * (slope)
+    // where slope = (y2 - y1) / (x2 - x1)
+    return y1 + (x - x1) * (y2 - y1) / (x2 - x1);
+}
+
+float linear_mapping1(float x, float x1, float x2, float y1, float y2){
+
+    // Linear mapping equation: slope = (y2 -y1)/(x2-x1)
+    //
+    // We have y vs x 
+    //
+    // The slope is essentialy the gradient of the straight line, also
+    // known as  the rate of change.   The rate of change  in a linear
+    // equation is constant.  So when  we use linear mapping, we apply
+    // a  constant rate  of change  between  the input  range and  the
+    // output range.
+
+    // To get greater y more quickly you need to increase the slope by
+    // increasion y2.  
+
+    // By swapping y1 and y2 the slope becomes -ve(as y2>y1) so we get
+    // a swapped around effect, or -ve linear mapping.
+
+
+    // Clamp input so it stays in  sensor range.
+    //
+    // 1. Clamp the input to the lower bound
+//    if (x <= x1) return y1;
+    
+    // 2. Clamp the input to the upper bound
+//    if (x >= x2) return y2;
 
     
     // Note: You lose precision with integer division because integers
