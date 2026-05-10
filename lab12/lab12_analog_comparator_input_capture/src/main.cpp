@@ -166,12 +166,9 @@ int main(void)
         // time.   Timer1 must  capture a  new rising  edge and  a new
         // falling edge in the ISR before dc_est changes.
 
-        // Occasionally  a spike  appears  at the  duty cycle  restart
-        // time.  This is  normal as sometimes tLow is  updated on one
-        // captured edge and tHigh is updated on the opposite captured
-        // edge inside.  Thus one value  can briefly belong to the new
-        // PWM cycle  while the  other still  belongs to  the previous
-        // cycle.
+        // Occasionally a  spike appears, on the  tHigh-tLow overlayed
+        // plot, at  the duty cycle  restart time.  This is  normal as
+        // tHigh is 100% and tLow is very small at that time.
 
         // Plot true and estimated duty cycle together in Teleplot
         usart_send_string(">dc_true(%):");
