@@ -58,7 +58,7 @@ ISR(TIMER1_CAPT_vect)
     float tmp = numOV * Tov + icr1 * Tclk_tc1;
 
     // Note  this  is  for  TC2  Fast  PWM  connected  to  the  Analog
-    // Comaparator(AC)  Negative  pin.   tFall  and  tLow  belongs  to
+    // Comaparator(AC)  Negative  pin.   tFall   and  tLow  belong  to
     // ACO(Analog Comaparator Output) of the Input capture.
     
     if (!bitCheck(TCCR1B, ICES1))
@@ -129,27 +129,25 @@ int main(void)
 
     unsigned int cnt = 0;
 
+    float tHigh_copy;
+    float tLow_copy;
+
     while (1)
     {
-        if (tHigh != 0 && tLow != 0)
+
+        // We  disable interrupts  here as  we don't  want the  Timer1
+        // Input Capture ISR to change them while we are using them.
+        //
+        cli();
+        tHigh_copy = tHigh;
+        tLow_copy = tLow;
+        sei();
+        
+        
+        if (tHigh_copy != 0 && tLow_copy != 0)
         {
-
-            // These comments  are irrelevant  as I have  changed tLow
-            // and tHigh calculation in ISR(TIMER1_CAPT_vect).
-            
-            /*
-                Because PWM is connected to the NEGATIVE comparator input,
-                the comparator output is inverted.
-
-                Comparator tHigh = PWM low time
-                Comparator tLow  = PWM high time
-
-                Therefore estimated PWM duty cycle uses tLow.
-            */
-
-//            dc_est = tLow / (tHigh + tLow) * 100.0;
             // Duty Cycle Estimated as a Percentage value.
-            dc_est = tHigh / (tHigh + tLow) * 100.0;
+            dc_est = tHigh_copy / (tHigh_copy + tLow_copy) * 100.0;
 
             /*
                 One full period is still:
@@ -158,8 +156,22 @@ int main(void)
                     f = 1 / T
             */
 
-            f_est = 1.0 / (tHigh + tLow);
+            f_est = 1.0 / (tHigh_copy + tLow_copy);
         }
+
+        // When dc_true  resets, that is OCR2B=OCR2A,  The dc_est lags
+        // dc_true  initially.  This  is  because  dc_true changes  in
+        // software immediately  but dc_est can only  change after the
+        // hardware has  captured new  PWM edges  after this  point in
+        // time.   Timer1 must  capture a  new rising  edge and  a new
+        // falling edge in the ISR before dc_est changes.
+
+        // Occasionally  a spike  appears  at the  duty cycle  restart
+        // time.  This is  normal as sometimes tLow is  updated on one
+        // captured edge and tHigh is updated on the opposite captured
+        // edge inside.  Thus one value  can briefly belong to the new
+        // PWM cycle  while the  other still  belongs to  the previous
+        // cycle.
 
         // Plot true and estimated duty cycle together in Teleplot
         usart_send_string(">dc_true(%):");
@@ -172,13 +184,13 @@ int main(void)
 
         // Plot tHigh and tLow together in Teleplot
         usart_send_string(">tHigh:");
-//        usart_send_num((tHigh*1000000), 6, 3);
-        usart_send_num((tHigh*1000), 8, 1);
+        usart_send_num((tHigh_copy*1000), 6, 3);
+        //usart_send_num((tHigh*1000), 8, 1);
         usart_send_byte('\n');
 
         usart_send_string(">tLow:");
-//        usart_send_num((tLow*1000000), 6, 3);
-        usart_send_num((tLow*1000), 8, 1);
+        usart_send_num((tLow_copy*1000), 6, 3);
+        //usart_send_num((tLow*1000), 8, 1);
         usart_send_byte('\n');
 
         // Plot true and estimated frequency together in Teleplot
@@ -202,23 +214,6 @@ int main(void)
             So after 150 loop iterations, decrement OCR2B.
         */
 
-        // cnt++;
-        // if (cnt >= 150)
-        // {
-        //     cnt = 0;
-
-        //     if (OCR2B > 0)
-        //     {
-        //         OCR2B--;
-        //     }
-        //     else
-        //     {
-        //         OCR2B = OCR2A;
-        //     }
-
-        //     dc_true = (OCR2B + 1.0) / (OCR2A + 1.0) * 100.0;
-        // }
-        
         cnt++;
         if (cnt >= 150)
         {
@@ -230,8 +225,8 @@ int main(void)
             }
             else
             {
-                //OCR2B = OCR2A;
-                OCR2B = 0;
+                OCR2B = OCR2A;
+                //OCR2B = OCR2A * (90/100); // 90% duty cycle
             }
 
             dc_true = (OCR2B + 1.0) / (OCR2A + 1.0) * 100.0;
