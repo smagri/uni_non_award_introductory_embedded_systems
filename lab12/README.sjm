@@ -1,0 +1,26 @@
+9may2026
+lab12 Summary:
+
+AC(Analog Comparator) is  being fed by a PWM signal  created by tc2 on
+one of its input pins AIN0/AIN1. At the same time the alternate pin is
+fed a positive reference signal.
+
+This AC  output is being  used to  trigger IC(Input Capture)  ISR each
+time the AC  output value toggles from:  0/1 ie rising edge  or 1/0 ie
+falling edge.  So  within the IC ISR  we can measure the  time the PWM
+signal was either high or low.
+
+
+Coding:
+
+For PWM signal on AINO, reference signal on AIN1.
+
+tmp is current IC ISR ICR1 register based time, set to tRise or tFall:
+
+AC 0->1 rising edge,
+tRise=tmp
+tLow=tRise-tFall
+
+AC 1->0 falling edge,
+tFall=tmp
+tHigh=tFall-tRise

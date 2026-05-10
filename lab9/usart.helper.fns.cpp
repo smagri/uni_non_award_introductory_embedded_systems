@@ -56,6 +56,54 @@ void usart_flush(void){
 
 
 
+void usart_read_string(char *ptr){
+
+    // UDR0 is the  TX/RX data I/O register of the  arduino.  When the
+    // flag RXC0  is set in  the UCR0A(Control and Status  Register A)
+    // data is ready  to be read from the RX  buffer(UDR0).  When RXC0
+    // is cleared in the UCR0A register the RX buffer(UDR0), is empty.
+
+    char tmp;
+
+    // Continue  reading bytes/characters  from the  RX buffer  of the
+    // arduino MCU till EOL is found.   The data comes from the serial
+    // monitor on my PC as ASCII characters.
+    while (1) {
+
+        // Block/wait till the user sends something.  Kai's code
+        while (!bitCheck(UCSR0A, RXC0))
+            ;            
+
+        tmp = UDR0; // TX/RX I/O register, or data buffer.
+
+        // Echo immediately to see if RXC0 os beomg set/
+        // usart_send_byte(tmp);
+
+        // Make sure your Serial Monitor has: Line Ending: CRLF (or at
+        // least LF due to this code.).
+        //
+        // Some terminals send \r, some \n and some both.
+        //
+        // If this byte is found we are at the end of our string.
+        if ( (tmp == '\r') || (tmp == '\n') ){
+            // Terminate string with string terminator as per C
+            // programming language spec.
+            *ptr = '\0';
+            //flag_read_done = 1;
+            return;
+        }
+        else{
+            // Otherwise save the character in the usart_buffer.
+            *ptr++ = tmp;
+        }
+
+        
+    } // end: while(1)
+        
+} // end: usart_read_string()
+
+
+
 void usart_send_byte(unsigned char data){
 
     // Send a byte  when the UDRE0(USART data register  empty flag) id
