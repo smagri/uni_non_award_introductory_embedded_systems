@@ -222,6 +222,7 @@ int main(void)
             }
             else
             {
+                // Reset
                 OCR2B = OCR2A;
                 //OCR2B = OCR2A * (90/100); // 90% duty cycle
             }
@@ -327,6 +328,9 @@ void set_tc1(void)
     bitSet(TIMSK1, TOIE1);   // Enable Timer1 overflow interrupt
     bitSet(TIMSK1, ICIE1);   // Enable Timer1 input capture interrupt
 
+    // CHECK do we need to do this? Clear input capture flag
+    // TIFR1 |= (1 << ICF1);
+    
     /*
         Timer1 prescaler = 1024.
 

@@ -24,3 +24,67 @@ tLow=tRise-tFall
 AC 1->0 falling edge,
 tFall=tmp
 tHigh=tFall-tRise
+
+-----------------------------------------------------------------------
+
+Explain the measurement  principle using smiilar diagrams  to those on
+pgs 25,27.
+
+Note I  have stapled the pages  for this explination together  for the
+lab12 class.
+
+Firstly,
+pg8,17 AC, TCNT1 Capture
+
+Foreach toggle  of the AC  output the IC  is triggered and  t1 counter
+TCNT1 value is put into ICR1 and ISR(TIMER1_CAPT_vect) triggers.
+
+
+pg 27.
+
+For the  current code TC2 Fast  PWM signal is being  fed int AINI(blue
+trace) and 3.3V(orange trace)reference into AINO, which is depicted in
+pg27.   Explain how  if AINO>AINI  and AINO<AINI  what the  ACO(Analog
+Comparator)(green values but trace penceled in too) output result is.
+
+At each  transition of AINI  1->0 or 0->1 the  ISR(TIMER1_CAPT_vec) is
+triggered  and from  the ICR1  register we  can calculate  the current
+cumulative time of the falling or  rising egde.  Which edge, Rising or
+falling, is  being measured depends  on ICES1  in TCCR1B being  set to
+1/0.
+
+Looking   at   measurements   in   ISR(TIMER1_CAPT_vec):   tmp=current
+cumulative  time  derived  from  ICRI(current TCNT1)  output  and  the
+current number of overflows of TCNT1.  tLow and tHigh refer to the AC0
+output.
+
+So looking at the measurement for the Rising edge:
+tmp=tRise
+tHigh=tRise-tFall
+
+So looking at the measurment for Falling edge:
+tmp=tFall
+tLow=tFall-tRise
+
+
+So in our main code we can now measure the estimated duty cycle=dc_est
+with this tHigh and tLow time for ACO.  dc_est = tHigh/(tHigh+tLow).
+
+Then  decrement the  DC every  1.5seconds. We  have _delay_ms(10)  and
+150*10ms =1500ms=1.5s.
+
+Then Plot dc_true/theoretically with  dc_est on Teleplot.  They should
+closely  follow  each other  with  difference  at reset  of  OCR2B(see
+code)between dc_true  and dc_est.  Expected  as there is a  lag before
+the dc_est measurement values can happen.
+
+Plot  of  tLow  vs  tHigh.   Described with  formula  and  diagram  of
+tHigh/tLow on last page.  DC starts large high will small low and then
+high gradually decreases as low  time increases.  Refer to the formula
+for this.
+
+Although _delay_ms(10) is used, the full loop period is longer than 10
+ms  because the  program  also sends  several blocking  USART/Teleplot
+messages each  loop. Therefore  cnt >=  150 does  not occur  every 1.5
+seconds; so only  about five duty-cycle changes appear in  a 15 second
+Teleplot window.
