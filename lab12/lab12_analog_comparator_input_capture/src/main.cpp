@@ -84,7 +84,7 @@ ISR(TIMER1_CAPT_vect)
         // AC(Analog  Comaparator) output  low  duration  for PWM  on
         // Positive AC Input.
         //
-        // tLow = tRise - tFall;
+        //tLow = tRise - tFall;
         
         // AC(Analog  Comaparator) output  high  duration  for PWM  on
         // Negative AC Input.
@@ -92,6 +92,11 @@ ISR(TIMER1_CAPT_vect)
         tHigh = tRise - tFall;
     }
 
+
+
+
+
+    
     // Toggle between rising-edge and falling-edge capture next.
     bitToggle(TCCR1B, ICES1);
 }
