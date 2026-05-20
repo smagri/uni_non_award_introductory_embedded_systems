@@ -171,9 +171,7 @@ ISR(USART_RX_vect){
     // in RX  buffer, with the  RXCIE0 flag  in UCSR0B.
 
     // We have used  this routine for the system to  set its debugging
-    // state by the user sending values to the USART.  That is setting
-    // the showing of ADC/LED brightness  values as a duty cycle value
-    // and for ultrasonic sensor/sonar distance measurments.
+    // state by the user sending values to the USART.
     
     char tmp = UDR0;
 
